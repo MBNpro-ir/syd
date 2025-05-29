@@ -1,4 +1,4 @@
-param (
+﻿param (
     [Alias('h')]
     [switch]$Help
 )
