@@ -3,7 +3,6 @@ param (
     [switch]$Help
 )
 
-# --- Script Wide Settings ---
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -12,8 +11,6 @@ $DebugLogPath = Join-Path $scriptDir "debug.txt"
 
 $originalBackground = $Host.UI.RawUI.BackgroundColor
 $originalForeground = $Host.UI.RawUI.ForegroundColor
-
-# --- Function Definitions ---
 
 function Write-ErrorLog {
     param ([string]$message)
@@ -90,7 +87,13 @@ function Initialize-Directory {
     }
 }
 
-# --- Main Script Logic ---
+function Convert-FileNameToComparable {
+    param ([string]$FileName)
+    $converted = $FileName.Replace('：', ':').Replace('｜', '|').Replace('？', '?').Replace('＜', '<').Replace('＞', '>').Replace('＂', '"').Replace('＊', '*').Replace('＼', '\').Replace('／', '/')
+    $invalidCharsRegex = '[{0}]' -f ([RegEx]::Escape([String]::Join("", [IO.Path]::GetInvalidFileNameChars() + [IO.Path]::GetInvalidPathChars())))
+    $converted = $converted -replace $invalidCharsRegex, '_'
+    return $converted
+}
 
 if ($Help) {
     Show-ScriptHelp
@@ -261,45 +264,33 @@ do {
         $isAudioOnlySelected = ($selectedChoiceIdentifier -eq "audio")
         
         $ytDlpArgsForDownload = New-Object System.Collections.Generic.List[string]
-        $ytDlpArgsForDownload.Add("--progress")
-        $ytDlpArgsForDownload.Add("--progress-delta") 
-        $ytDlpArgsForDownload.Add("0")
         $ytDlpArgsForDownload.Add("--no-warnings")
-        $ytDlpArgsForDownload.Add("--ffmpeg-location")
-        $ytDlpArgsForDownload.Add($ffmpegPath)
-        $ytDlpArgsForDownload.Add("-o")
-        $ytDlpArgsForDownload.Add($ytdlpOutputTemplate)
-        $formatString = "" 
+        $ytDlpArgsForDownload.Add("--ffmpeg-location"); $ytDlpArgsForDownload.Add($ffmpegPath)
+        $ytDlpArgsForDownload.Add("-o"); $ytDlpArgsForDownload.Add($ytdlpOutputTemplate)
+        
+        $formatStringForDownload = "" 
 
         if (-not $isAudioOnlySelected) { 
             $selectedHeight = $selectedChoiceIdentifier 
-            $formatString = "bestvideo[height<=$selectedHeight][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=$selectedHeight]+bestaudio/best[height<=$selectedHeight][ext=mp4]/best[height<=$selectedHeight]"
+            $formatStringForDownload = "bestvideo[height<=$selectedHeight][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=$selectedHeight]+bestaudio/best[height<=$selectedHeight][ext=mp4]/best[height<=$selectedHeight]"
             Write-Host "Preparing to download video in $($selectedHeight)p... This may take a while." -ForegroundColor Green
-            $ytDlpArgsForDownload.Insert(0, $formatString) 
-            $ytDlpArgsForDownload.Insert(0, "-f")
-            $ytDlpArgsForDownload.Add("--merge-output-format")
-            $ytDlpArgsForDownload.Add("mp4")
+            $ytDlpArgsForDownload.Add("-f"); $ytDlpArgsForDownload.Add($formatStringForDownload)
+            $ytDlpArgsForDownload.Add("--merge-output-format"); $ytDlpArgsForDownload.Add("mp4")
         } else { 
             Write-Host "Preparing to download audio... This may take a while." -ForegroundColor Green
-            $formatString = "bestaudio"
-            $ytDlpArgsForDownload.Insert(0, $formatString) 
-            $ytDlpArgsForDownload.Insert(0, "-f")
-            $ytDlpArgsForDownload.Add("--extract-audio")
-            $ytDlpArgsForDownload.Add("--audio-format")
-            $ytDlpArgsForDownload.Add("mp3")
+            $formatStringForDownload = "bestaudio"
+            $ytDlpArgsForDownload.Add("-f"); $ytDlpArgsForDownload.Add($formatStringForDownload)
+            $ytDlpArgsForDownload.Add("--extract-audio"); $ytDlpArgsForDownload.Add("--audio-format"); $ytDlpArgsForDownload.Add("mp3")
         }
         $ytDlpArgsForDownload.Add($currentUrl) 
         
-        $downloadProcessOutputLines = @()
-        Write-Host "Executing yt-dlp for download... (Live progress should appear below)" -ForegroundColor DarkGray 
+        $downloadProcessOutputLines = @() 
+        Write-Host "Executing yt-dlp for download..." -ForegroundColor DarkGray 
         Write-ErrorLog "Executing Download: `"$ytDlpPath`" $($ytDlpArgsForDownload -join ' ')"
         
         $exitCodeDownload = -1 
         try {
-            & $ytDlpPath $ytDlpArgsForDownload *>&1 | ForEach-Object {
-                Write-Host $_
-                $downloadProcessOutputLines += $_
-            }
+            $downloadProcessOutputLines = & $ytDlpPath $ytDlpArgsForDownload 2>&1 
             $exitCodeDownload = $LASTEXITCODE
         } catch {
             $logMsg = "Critical error executing yt-dlp for download. Command: `"$ytDlpPath`" $($ytDlpArgsForDownload -join ' '). Exception: $($_.Exception.ToString())"
@@ -309,53 +300,77 @@ do {
         }
 
         if ($exitCodeDownload -eq 0) {
-            Write-ErrorLog "yt-dlp download process completed successfully. Exit Code: $exitCodeDownload. Full output for parsing: $($downloadProcessOutputLines -join [System.Environment]::NewLine)"
-            $downloadedFileInTemp = $null
+            Write-ErrorLog "yt-dlp download process completed successfully. Exit Code: $exitCodeDownload."
             $downloadOutputStringForParsing = $downloadProcessOutputLines -join [System.Environment]::NewLine
+            $downloadedFileInTemp = $null
 
-            # Priority 1: Parse [Merger] or [ExtractAudio] or [download] Destination from live output
             $PrimaryPatterns = @(
-                [regex]'\[Merger\] Merging formats into "(.*?)"', 
-                [regex]'\[ExtractAudio\] Destination: (.*?)$', 
-                [regex]'\[download\] Destination: (.*?)$', # Catches initial downloads and "already downloaded" if path is absolute
-                [regex]'\[download\] (.*?) has already been downloaded' # Catches "already downloaded" when path is absolute
+                [regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"', 
+                [regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$', 
+                [regex]'\[download\] Destination: (?<FileNameFromOutput>.*?)$',
+                [regex]'\[download\] (?<FileNameFromOutput>.*?) has already been downloaded'
             )
             foreach ($pattern in $PrimaryPatterns) {
                 $match = $pattern.Match($downloadOutputStringForParsing)
                 if ($match.Success) {
-                    $filePathFromOutput = $match.Groups[1].Value.Trim()
-                    # Check if it's an absolute path within our Temp folder and exists
-                    if ((Split-Path $filePathFromOutput -IsAbsolute) -and ($filePathFromOutput -like "$tempDir\*") -and (Test-Path $filePathFromOutput)) {
-                        $downloadedFileInTemp = $filePathFromOutput
-                        Write-ErrorLog "File confirmed by primary pattern ('$($pattern.ToString())'): $downloadedFileInTemp"
+                    $filePathFromOutputRaw = $match.Groups["FileNameFromOutput"].Value.Trim()
+                    if ((Split-Path $filePathFromOutputRaw -IsAbsolute) -and ($filePathFromOutputRaw -like "$tempDir\*") -and (Test-Path $filePathFromOutputRaw)) {
+                        $downloadedFileInTemp = $filePathFromOutputRaw
+                        Write-ErrorLog "File confirmed by primary pattern ('$($pattern.ToString())') using raw path: $downloadedFileInTemp"
                         break
                     }
-                    # If it's just a filename (relative), join with $tempDir
-                    elseif (-not (Split-Path $filePathFromOutput -IsAbsolute)) {
-                        $potentialFullPath = Join-Path $tempDir (Split-Path $filePathFromOutput -Leaf)
-                        if (Test-Path $potentialFullPath) {
-                            $downloadedFileInTemp = $potentialFullPath
-                            Write-ErrorLog "File confirmed by primary pattern (relative, '$($pattern.ToString())'): $downloadedFileInTemp"
+                    elseif (-not (Split-Path $filePathFromOutputRaw -IsAbsolute)) {
+                        $potentialFullPathRaw = Join-Path $tempDir (Split-Path $filePathFromOutputRaw -Leaf)
+                        if (Test-Path $potentialFullPathRaw) {
+                            $downloadedFileInTemp = $potentialFullPathRaw
+                            Write-ErrorLog "File confirmed by primary pattern (relative, '$($pattern.ToString())') using raw path: $downloadedFileInTemp"
                             break
                         }
                     }
                 }
             }
             
-            # Priority 2: If not found, use yt-dlp --print filename
             if (-not $downloadedFileInTemp) {
-                Write-ErrorLog "Primary pattern matching failed. Trying yt-dlp --print filename..."
+                 Write-ErrorLog "Primary pattern matching from download output failed. Trying normalized name comparison for files in Temp..."
+                 $tempFilesList = Get-ChildItem -Path $tempDir -File 
+                 $expectedFinalFileNamePatternFromOutput = ""
+                 
+                 $mergerMatch = ([regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"').Match($downloadOutputStringForParsing)
+                 $extractAudioMatch = ([regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$').Match($downloadOutputStringForParsing)
+
+                 if ($mergerMatch.Success) { $expectedFinalFileNamePatternFromOutput = Split-Path ($mergerMatch.Groups["FileNameFromOutput"].Value.Trim()) -Leaf }
+                 elseif ($extractAudioMatch.Success) { $expectedFinalFileNamePatternFromOutput = Split-Path ($extractAudioMatch.Groups["FileNameFromOutput"].Value.Trim()) -Leaf }
+                 else { 
+                    $expectedFinalFileNamePatternFromOutput = $videoInfo.title + (if ($isAudioOnlySelected) {".mp3"} else {".mp4"})
+                 }
+                 
+                 if ($expectedFinalFileNamePatternFromOutput) {
+                     $normalizedExpectedName = Convert-FileNameToComparable $expectedFinalFileNamePatternFromOutput
+                     Write-ErrorLog "Normalized expected name for comparison: $normalizedExpectedName"
+                     foreach ($fileInTempDir in $tempFilesList) {
+                         $normalizedFileInTempDirName = Convert-FileNameToComparable $fileInTempDir.Name
+                         if ($normalizedFileInTempDirName -eq $normalizedExpectedName) {
+                             $downloadedFileInTemp = $fileInTempDir.FullName
+                             Write-ErrorLog "File re-confirmed by normalized name comparison of actual files: $downloadedFileInTemp"
+                             break
+                         }
+                     }
+                 }
+            }
+            
+            if (-not $downloadedFileInTemp) {
+                Write-ErrorLog "Normalized name comparison also failed. Trying yt-dlp --print filename..."
                 $ytDlpArgsForPrint = New-Object System.Collections.Generic.List[string]
                 $ytDlpArgsForPrint.Add("--no-download"); $ytDlpArgsForPrint.Add("--no-warnings"); $ytDlpArgsForPrint.Add("--print"); $ytDlpArgsForPrint.Add("filename")
                 $ytDlpArgsForPrint.Add("-o"); $ytDlpArgsForPrint.Add($ytdlpOutputTemplate)
                 if (-not $isAudioOnlySelected) {
-                    $ytDlpArgsForPrint.Add("-f"); $ytDlpArgsForPrint.Add($formatString); $ytDlpArgsForPrint.Add("--merge-output-format"); $ytDlpArgsForPrint.Add("mp4")
+                    $ytDlpArgsForPrint.Add("-f"); $ytDlpArgsForPrint.Add($formatStringForDownload); $ytDlpArgsForPrint.Add("--merge-output-format"); $ytDlpArgsForPrint.Add("mp4")
                 } else {
                     $ytDlpArgsForPrint.Add("-f"); $ytDlpArgsForPrint.Add("bestaudio"); $ytDlpArgsForPrint.Add("--extract-audio"); $ytDlpArgsForPrint.Add("--audio-format"); $ytDlpArgsForPrint.Add("mp3")
                 }
                 $ytDlpArgsForPrint.Add($currentUrl)
                 Write-ErrorLog "Executing Print Filename: `"$ytDlpPath`" $($ytDlpArgsForPrint -join ' ')"
-                $determinedPathArray = & $ytDlpPath $ytDlpArgsForPrint 2>$null
+                $determinedPathArray = & $ytDlpPath $ytDlpArgsForPrint 2>$null 
                 
                 if ($LASTEXITCODE -eq 0 -and $determinedPathArray -and $determinedPathArray.Count -gt 0) {
                     $determinedPath = ($determinedPathArray | Select-Object -First 1).Trim()
@@ -375,23 +390,6 @@ do {
                     }
                 } else {
                      Write-ErrorLog "yt-dlp --print filename failed. Exit Code: $LASTEXITCODE. Output: $($determinedPathArray -join ', ')"
-                }
-            }
-
-            # Priority 3: Fallback to searching Temp folder
-            if (-not $downloadedFileInTemp -and $videoInfo.title) {
-                Write-ErrorLog "--print filename also failed or file not found. Attempting fallback: searching Temp folder..."
-                $fileExtensionFilter = if ($isAudioOnlySelected) { "*.mp3" } else { "*.mp4" }
-                # Match against any file containing the first few words of the sanitized title.
-                $sanitizedTitleWords = ($videoInfo.title -replace '[\\/:*?"<>|]', '_').Split(' ')
-                $searchPattern = "*" + ($sanitizedTitleWords[0..([System.Math]::Min(4, $sanitizedTitleWords.Count-1))] -join '*') + "*" + $fileExtensionFilter.Substring(1)
-
-                $latestFileInTemp = Get-ChildItem -Path $tempDir -Filter $fileExtensionFilter | Where-Object {$_.Name -like $searchPattern} | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                if ($latestFileInTemp -and (Test-Path $latestFileInTemp.FullName)) {
-                    $downloadedFileInTemp = $latestFileInTemp.FullName
-                    Write-ErrorLog "Fallback (title substring match) confirmed file: $downloadedFileInTemp"
-                } else {
-                     Write-ErrorLog "Fallback search in Temp folder also failed to find a matching file."
                 }
             }
 
@@ -416,7 +414,7 @@ do {
                 $logMsg = "yt-dlp download process completed (Exit Code $exitCodeDownload), but script could not identify/locate the downloaded file in '$tempDir'. Full download output for parsing was: $downloadOutputStringForParsing"
                 Resolve-ScriptError -UserMessage "Download seemed to complete (check console), but the script could not find the final file in 'Temp' to move it. Please check 'Temp' folder." `
                                    -InternalLogMessage $logMsg
-                $tempFiles = Get-ChildItem -Path $tempDir -ErrorAction SilentlyContinue
+                $tempFiles = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
                 if ($tempFiles) { Write-Host "Files currently in '$tempDir': $( ($tempFiles).Name -join ', ' )" -ForegroundColor Yellow }
             }
         } else { 
