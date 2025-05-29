@@ -28,9 +28,9 @@ function Write-ErrorLog {
 
 function Resolve-ScriptError {
     param (
-        [string]$UserMessage, 
-        [string]$InternalLogMessage, 
-        [switch]$IsCritical = $false 
+        [string]$UserMessage,
+        [string]$InternalLogMessage,
+        [switch]$IsCritical = $false
     )
     Write-Host "`n-------------------- SCRIPT ERROR --------------------" -ForegroundColor Red
     Write-Host $UserMessage -ForegroundColor Red
@@ -41,10 +41,10 @@ function Resolve-ScriptError {
     Write-Host "--------------------------------------------------------" -ForegroundColor Red
     Write-Host ""
     Write-ErrorLog "UserNotified: `"$UserMessage`" --- InternalLog: `"$InternalLogMessage`""
-    
+
     if ($IsCritical) {
         Write-Host "The script will now exit due to a critical error." -ForegroundColor Red
-        $Host.UI.RawUI.BackgroundColor = $originalBackground 
+        $Host.UI.RawUI.BackgroundColor = $originalBackground
         $Host.UI.RawUI.ForegroundColor = $originalForeground
         Clear-Host
         exit 1
@@ -52,7 +52,7 @@ function Resolve-ScriptError {
 }
 
 function Show-ScriptHelp {
-    Write-Host "" 
+    Write-Host ""
     Write-Host "--------------------------- SCRIPT HELP ---------------------------" -ForegroundColor Yellow
     Write-Host " syd.ps1 - YouTube Downloader by MBNPRO" -ForegroundColor Cyan
     Write-Host "---------------------------------------------------------------------"
@@ -72,7 +72,7 @@ function Show-ScriptHelp {
     Write-Host "   - Auto-Install: Downloads yt-dlp and ffmpeg if missing."
     Write-Host "   - Logging: Records errors and actions in 'debug.txt'."
     Write-Host "---------------------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host "" 
+    Write-Host ""
 }
 
 function Initialize-Directory {
@@ -93,11 +93,11 @@ function Initialize-Directory {
 function Convert-FileNameToComparable {
     param ([string]$FileName)
     $converted = $FileName.Replace('：', ':').Replace('｜', '|').Replace('？', '?').Replace('＜', '<').Replace('＞', '>').Replace('＂', '"').Replace('＊', '*').Replace('＼', '\').Replace('／', '/')
-    
-    $invalidChars = [System.IO.Path]::GetInvalidFileNameChars() + [System.IO.Path]::GetInvalidPathChars() 
+
+    $invalidChars = [System.IO.Path]::GetInvalidFileNameChars() + [System.IO.Path]::GetInvalidPathChars()
     $invalidCharsRegexPattern = ($invalidChars | ForEach-Object {[System.Text.RegularExpressions.Regex]::Escape($_)}) -join '|'
-    
-    if ($invalidCharsRegexPattern) { 
+
+    if ($invalidCharsRegexPattern) {
         $converted = $converted -replace $invalidCharsRegexPattern, '_'
     }
     return $converted
@@ -156,10 +156,10 @@ if (-not (Test-Path $ffmpegPath)) {
     }
 }
 
-if ($env:PATH -notlike "*;$($scriptDir);*") { 
+if ($env:PATH -notlike "*;$($scriptDir);*") {
     $env:PATH = "$($scriptDir);$($env:PATH)"
     Write-ErrorLog "Added script directory to session PATH: $scriptDir"
-} 
+}
 
 $Host.UI.RawUI.BackgroundColor = "Black"
 $Host.UI.RawUI.ForegroundColor = "White"
@@ -172,7 +172,7 @@ Write-Host "Initial Instructions:" -ForegroundColor Green
 Write-Host "1. When prompted, enter a valid YouTube video URL."
 Write-Host "2. Choose the desired download quality (video) or select audio only."
 Write-Host "3. Files are saved in 'Downloaded\Video' or 'Downloaded\Audio' subfolders within the script directory."
-Write-Host "4. Type 'exit' to quit, or '-h' / 'help' for detailed help at the prompt." 
+Write-Host "4. Type 'exit' to quit, or '-h' / 'help' for detailed help at the prompt."
 Write-Host "--------------------------------------------------------------------" -ForegroundColor Yellow
 Write-Host ""
 
@@ -186,7 +186,7 @@ Initialize-Directory $downloadedDir
 Initialize-Directory $videoOutputDir
 Initialize-Directory $audioOutputDir
 
-$continueResponse = 'y' 
+$continueResponse = 'y'
 
 do {
     Write-Host "=== YouTube Downloader ===" -ForegroundColor Yellow
@@ -196,14 +196,14 @@ do {
 
     if ($userInputUrl -match '^\-h$' -or $userInputUrl -match '^\-{1,2}help$' -or $userInputUrl -eq 'help') {
         Show-ScriptHelp
-        $continueResponse = 'y' 
-        continue 
+        $continueResponse = 'y'
+        continue
     }
-    
-    $currentUrl = $userInputUrl 
+
+    $currentUrl = $userInputUrl
     Write-ErrorLog "Attempting to process URL: $currentUrl"
 
-    $jsonOutput = "" 
+    $jsonOutput = ""
     try {
         $jsonOutput = & $ytDlpPath --dump-json --no-warnings $currentUrl 2>&1
         if ($LASTEXITCODE -ne 0) { throw "yt-dlp --dump-json failed. Exit code: $LASTEXITCODE" }
@@ -213,7 +213,7 @@ do {
                            -InternalLogMessage $logMsg
         $continueResponse = 'y' ; continue
     }
-    
+
     $videoInfo = $null
     try {
         $videoInfo = ($jsonOutput -join [System.Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop
@@ -227,24 +227,24 @@ do {
     $formats = $videoInfo.formats
     $availableHeights = $formats | Where-Object { $_.height -ne $null -and $_.vcodec -ne 'none' -and $_.acodec -ne $null } | Select-Object -ExpandProperty height | Sort-Object -Unique -Descending
 
-    $optionsArray = @() 
-    $displayOptions = @() 
+    $optionsArray = @()
+    $displayOptions = @()
 
     $videoOptionsCount = 0
     if ($availableHeights -and $availableHeights.Count -gt 0) {
         foreach ($h in $availableHeights) {
-            $optionsArray += "$h" 
+            $optionsArray += "$h"
             $displayOptions += "$($h)p (MP4 Video)"
             $videoOptionsCount++
         }
     }
-    
-    $optionsArray += "audio" 
+
+    $optionsArray += "audio"
     $displayOptions += "Audio only (MP3)"
 
     Write-Host "`nAvailable Download Options for '$($videoInfo.title)':" -ForegroundColor Cyan
     Write-Host "---------------------------------------------" -ForegroundColor Gray
-    
+
     $currentOptionNumber = 1
     if ($videoOptionsCount -gt 0) {
         Write-Host "--- Video Qualities ---" -ForegroundColor Yellow
@@ -257,48 +257,48 @@ do {
     }
 
     Write-Host "`n--- Audio Option ---" -ForegroundColor Yellow
-    Write-Host "  $($currentOptionNumber). $($displayOptions[$displayOptions.Count -1])" -ForegroundColor White 
+    Write-Host "  $($currentOptionNumber). $($displayOptions[$displayOptions.Count -1])" -ForegroundColor White
     Write-Host "---------------------------------------------" -ForegroundColor Gray
 
     $userSelectionInput = Read-Host "`nSelect an option (1-$($currentOptionNumber))"
     Write-Host ""
 
     if ($userSelectionInput -match '^\d+$' -and [int]$userSelectionInput -ge 1 -and [int]$userSelectionInput -le $currentOptionNumber) {
-        $selectedIndex = [int]$userSelectionInput - 1 
-        
-        $selectedChoiceIdentifier = $optionsArray[$selectedIndex] 
-        $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\%(title)s.%(ext)s" 
+        $selectedIndex = [int]$userSelectionInput - 1
+
+        $selectedChoiceIdentifier = $optionsArray[$selectedIndex]
+        $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\%(title)s.%(ext)s"
 
         $isAudioOnlySelected = ($selectedChoiceIdentifier -eq "audio")
-        
+
         $ytDlpArgsForDownload = New-Object System.Collections.Generic.List[string]
         $ytDlpArgsForDownload.Add("--no-warnings")
         $ytDlpArgsForDownload.Add("--ffmpeg-location"); $ytDlpArgsForDownload.Add($ffmpegPath)
         $ytDlpArgsForDownload.Add("-o"); $ytDlpArgsForDownload.Add($ytdlpOutputTemplate)
-        
-        $formatStringForDownload = "" 
 
-        if (-not $isAudioOnlySelected) { 
-            $selectedHeight = $selectedChoiceIdentifier 
+        $formatStringForDownload = ""
+
+        if (-not $isAudioOnlySelected) {
+            $selectedHeight = $selectedChoiceIdentifier
             $formatStringForDownload = "bestvideo[height<=$selectedHeight][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=$selectedHeight]+bestaudio/best[height<=$selectedHeight][ext=mp4]/best[height<=$selectedHeight]"
             Write-Host "Preparing to download video in $($selectedHeight)p... This may take a while." -ForegroundColor Green
             $ytDlpArgsForDownload.Add("-f"); $ytDlpArgsForDownload.Add($formatStringForDownload)
             $ytDlpArgsForDownload.Add("--merge-output-format"); $ytDlpArgsForDownload.Add("mp4")
-        } else { 
+        } else {
             Write-Host "Preparing to download audio... This may take a while." -ForegroundColor Green
             $formatStringForDownload = "bestaudio"
             $ytDlpArgsForDownload.Add("-f"); $ytDlpArgsForDownload.Add($formatStringForDownload)
             $ytDlpArgsForDownload.Add("--extract-audio"); $ytDlpArgsForDownload.Add("--audio-format"); $ytDlpArgsForDownload.Add("mp3")
         }
-        $ytDlpArgsForDownload.Add($currentUrl) 
-        
-        $downloadProcessOutputLines = @() 
-        Write-Host "Executing yt-dlp for download..." -ForegroundColor DarkGray 
+        $ytDlpArgsForDownload.Add($currentUrl)
+
+        $downloadProcessOutputLines = @()
+        Write-Host "Executing yt-dlp for download..." -ForegroundColor DarkGray
         Write-ErrorLog "Executing Download: `"$ytDlpPath`" $($ytDlpArgsForDownload -join ' ')"
-        
-        $exitCodeDownload = -1 
+
+        $exitCodeDownload = -1
         try {
-            $downloadProcessOutputLines = & $ytDlpPath $ytDlpArgsForDownload 2>&1 
+            $downloadProcessOutputLines = & $ytDlpPath $ytDlpArgsForDownload 2>&1
             $exitCodeDownload = $LASTEXITCODE
         } catch {
             $logMsg = "Critical error executing yt-dlp for download. Command: `"$ytDlpPath`" $($ytDlpArgsForDownload -join ' '). Exception: $($_.Exception.ToString())"
@@ -313,8 +313,8 @@ do {
             $downloadedFileInTemp = $null
 
             $PrimaryPatterns = @(
-                [regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"', 
-                [regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$', 
+                [regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"',
+                [regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$',
                 [regex]'\[download\] Destination: (?<FileNameFromOutput>.*?)$',
                 [regex]'\[download\] (?<FileNameFromOutput>.*?) has already been downloaded'
             )
@@ -337,21 +337,21 @@ do {
                     }
                 }
             }
-            
+
             if (-not $downloadedFileInTemp) {
                  Write-ErrorLog "Primary pattern matching from download output failed. Trying normalized name comparison for files in Temp..."
-                 $tempFilesList = Get-ChildItem -Path $tempDir -File 
+                 $tempFilesList = Get-ChildItem -Path $tempDir -File
                  $expectedFinalFileNamePatternFromOutput = ""
-                 
+
                  $mergerMatch = ([regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"').Match($downloadOutputStringForParsing)
                  $extractAudioMatch = ([regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$').Match($downloadOutputStringForParsing)
 
                  if ($mergerMatch.Success) { $expectedFinalFileNamePatternFromOutput = Split-Path ($mergerMatch.Groups["FileNameFromOutput"].Value.Trim()) -Leaf }
                  elseif ($extractAudioMatch.Success) { $expectedFinalFileNamePatternFromOutput = Split-Path ($extractAudioMatch.Groups["FileNameFromOutput"].Value.Trim()) -Leaf }
-                 else { 
+                 else {
                     $expectedFinalFileNamePatternFromOutput = $videoInfo.title + (if ($isAudioOnlySelected) {".mp3"} else {".mp4"})
                  }
-                 
+
                  if ($expectedFinalFileNamePatternFromOutput) {
                      $normalizedExpectedName = Convert-FileNameToComparable $expectedFinalFileNamePatternFromOutput
                      Write-ErrorLog "Normalized expected name for comparison: $normalizedExpectedName"
@@ -365,7 +365,7 @@ do {
                      }
                  }
             }
-            
+
             if (-not $downloadedFileInTemp) {
                 Write-ErrorLog "Normalized name comparison also failed. Trying yt-dlp --print filename..."
                 $ytDlpArgsForPrint = New-Object System.Collections.Generic.List[string]
@@ -378,8 +378,8 @@ do {
                 }
                 $ytDlpArgsForPrint.Add($currentUrl)
                 Write-ErrorLog "Executing Print Filename: `"$ytDlpPath`" $($ytDlpArgsForPrint -join ' ')"
-                $determinedPathArray = & $ytDlpPath $ytDlpArgsForPrint 2>$null 
-                
+                $determinedPathArray = & $ytDlpPath $ytDlpArgsForPrint 2>$null
+
                 if ($LASTEXITCODE -eq 0 -and $determinedPathArray -and $determinedPathArray.Count -gt 0) {
                     $determinedPath = ($determinedPathArray | Select-Object -First 1).Trim()
                     if (Test-Path $determinedPath) {
@@ -406,12 +406,12 @@ do {
                 $fileTypeString = if ($isAudioOnlySelected) { "Audio" } else { "Video" }
                 $destinationDir = if ($isAudioOnlySelected) { $audioOutputDir } else { $videoOutputDir }
                 $destinationPath = Join-Path $destinationDir $fileNameOnly
-                
+
                 Write-ErrorLog "Attempting to move '$fileNameOnly' from '$downloadedFileInTemp' to '$destinationDir'..."
                 try {
                     Move-Item -Path $downloadedFileInTemp -Destination $destinationPath -Force -ErrorAction Stop
-                    Write-Host "`n$fileTypeString file '$fileNameOnly' successfully downloaded and moved to:" -ForegroundColor Green 
-                    Write-Host "$destinationPath" -ForegroundColor Cyan 
+                    Write-Host "`n$fileTypeString file '$fileNameOnly' successfully downloaded and moved to:" -ForegroundColor Green
+                    Write-Host "$destinationPath" -ForegroundColor Cyan
                     Write-ErrorLog "Successfully moved '$downloadedFileInTemp' to '$destinationPath'."
                 } catch {
                     $logMsg = "Move-Item failed. Source: '$downloadedFileInTemp', Dest: '$destinationPath'. Exception: $($_.Exception.ToString())"
@@ -425,12 +425,12 @@ do {
                 $tempFiles = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
                 if ($tempFiles) { Write-Host "Files currently in '$tempDir': $( ($tempFiles).Name -join ', ' )" -ForegroundColor Yellow }
             }
-        } else { 
+        } else {
             $logMsg = "yt-dlp download process failed with Exit Code: $exitCodeDownload. URL: $currentUrl. Args: $($ytDlpArgsForDownload -join ' '). Output: $($downloadProcessOutputLines -join [System.Environment]::NewLine)"
             Resolve-ScriptError -UserMessage "The download process with yt-dlp failed. Please check the console output above for errors from yt-dlp." `
                                -InternalLogMessage $logMsg
         }
-    } else { 
+    } else {
         Write-Host "Invalid selection. Please try again." -ForegroundColor Red
     }
 
@@ -439,7 +439,7 @@ do {
     if ($userContinueChoice.ToLower() -eq 'y') {
         $continueResponse = 'y'
     } else {
-        $continueResponse = 'n' 
+        $continueResponse = 'n'
     }
 
 } while ($continueResponse.ToLower() -eq 'y')
