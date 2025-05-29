@@ -3,6 +3,7 @@ param (
     [switch]$Help
 )
 
+# --- Script Wide Settings ---
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -11,6 +12,8 @@ $DebugLogPath = Join-Path $scriptDir "debug.txt"
 
 $originalBackground = $Host.UI.RawUI.BackgroundColor
 $originalForeground = $Host.UI.RawUI.ForegroundColor
+
+# --- Function Definitions ---
 
 function Write-ErrorLog {
     param ([string]$message)
@@ -90,8 +93,13 @@ function Initialize-Directory {
 function Convert-FileNameToComparable {
     param ([string]$FileName)
     $converted = $FileName.Replace('：', ':').Replace('｜', '|').Replace('？', '?').Replace('＜', '<').Replace('＞', '>').Replace('＂', '"').Replace('＊', '*').Replace('＼', '\').Replace('／', '/')
-    $invalidCharsRegex = '[{0}]' -f ([RegEx]::Escape([String]::Join("", [IO.Path]::GetInvalidFileNameChars() + [IO.Path]::GetInvalidPathChars())))
-    $converted = $converted -replace $invalidCharsRegex, '_'
+    
+    $invalidChars = [System.IO.Path]::GetInvalidFileNameChars() + [System.IO.Path]::GetInvalidPathChars() 
+    $invalidCharsRegexPattern = ($invalidChars | ForEach-Object {[System.Text.RegularExpressions.Regex]::Escape($_)}) -join '|'
+    
+    if ($invalidCharsRegexPattern) { 
+        $converted = $converted -replace $invalidCharsRegexPattern, '_'
+    }
     return $converted
 }
 
