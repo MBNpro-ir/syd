@@ -199,11 +199,11 @@ do {
         $continueResponse = 'y'
         continue
     }
-
-    $currentUrl = $userInputUrl
+    
+    $currentUrl = $userInputUrl 
     Write-ErrorLog "Attempting to process URL: $currentUrl"
 
-    $jsonOutput = ""
+    $jsonOutput = "" 
     try {
         $jsonOutput = & $ytDlpPath --dump-json --no-warnings $currentUrl 2>&1
         if ($LASTEXITCODE -ne 0) { throw "yt-dlp --dump-json failed. Exit code: $LASTEXITCODE" }
@@ -213,7 +213,7 @@ do {
                            -InternalLogMessage $logMsg
         $continueResponse = 'y' ; continue
     }
-
+    
     $videoInfo = $null
     try {
         $videoInfo = ($jsonOutput -join [System.Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop
@@ -227,24 +227,24 @@ do {
     $formats = $videoInfo.formats
     $availableHeights = $formats | Where-Object { $_.height -ne $null -and $_.vcodec -ne 'none' -and $_.acodec -ne $null } | Select-Object -ExpandProperty height | Sort-Object -Unique -Descending
 
-    $optionsArray = @()
-    $displayOptions = @()
+    $optionsArray = @() 
+    $displayOptions = @() 
 
     $videoOptionsCount = 0
     if ($availableHeights -and $availableHeights.Count -gt 0) {
         foreach ($h in $availableHeights) {
-            $optionsArray += "$h"
+            $optionsArray += "$h" 
             $displayOptions += "$($h)p (MP4 Video)"
             $videoOptionsCount++
         }
     }
-
-    $optionsArray += "audio"
+    
+    $optionsArray += "audio" 
     $displayOptions += "Audio only (MP3)"
 
     Write-Host "`nAvailable Download Options for '$($videoInfo.title)':" -ForegroundColor Cyan
     Write-Host "---------------------------------------------" -ForegroundColor Gray
-
+    
     $currentOptionNumber = 1
     if ($videoOptionsCount -gt 0) {
         Write-Host "--- Video Qualities ---" -ForegroundColor Yellow
@@ -257,48 +257,48 @@ do {
     }
 
     Write-Host "`n--- Audio Option ---" -ForegroundColor Yellow
-    Write-Host "  $($currentOptionNumber). $($displayOptions[$displayOptions.Count -1])" -ForegroundColor White
+    Write-Host "  $($currentOptionNumber). $($displayOptions[$displayOptions.Count -1])" -ForegroundColor White 
     Write-Host "---------------------------------------------" -ForegroundColor Gray
 
     $userSelectionInput = Read-Host "`nSelect an option (1-$($currentOptionNumber))"
     Write-Host ""
 
     if ($userSelectionInput -match '^\d+$' -and [int]$userSelectionInput -ge 1 -and [int]$userSelectionInput -le $currentOptionNumber) {
-        $selectedIndex = [int]$userSelectionInput - 1
-
-        $selectedChoiceIdentifier = $optionsArray[$selectedIndex]
-        $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\%(title)s.%(ext)s"
+        $selectedIndex = [int]$userSelectionInput - 1 
+        
+        $selectedChoiceIdentifier = $optionsArray[$selectedIndex] 
+        $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\%(title)s.%(ext)s" 
 
         $isAudioOnlySelected = ($selectedChoiceIdentifier -eq "audio")
-
+        
         $ytDlpArgsForDownload = New-Object System.Collections.Generic.List[string]
         $ytDlpArgsForDownload.Add("--no-warnings")
         $ytDlpArgsForDownload.Add("--ffmpeg-location"); $ytDlpArgsForDownload.Add($ffmpegPath)
         $ytDlpArgsForDownload.Add("-o"); $ytDlpArgsForDownload.Add($ytdlpOutputTemplate)
+        
+        $formatStringForDownload = "" 
 
-        $formatStringForDownload = ""
-
-        if (-not $isAudioOnlySelected) {
-            $selectedHeight = $selectedChoiceIdentifier
+        if (-not $isAudioOnlySelected) { 
+            $selectedHeight = $selectedChoiceIdentifier 
             $formatStringForDownload = "bestvideo[height<=$selectedHeight][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=$selectedHeight]+bestaudio/best[height<=$selectedHeight][ext=mp4]/best[height<=$selectedHeight]"
             Write-Host "Preparing to download video in $($selectedHeight)p... This may take a while." -ForegroundColor Green
             $ytDlpArgsForDownload.Add("-f"); $ytDlpArgsForDownload.Add($formatStringForDownload)
             $ytDlpArgsForDownload.Add("--merge-output-format"); $ytDlpArgsForDownload.Add("mp4")
-        } else {
+        } else { 
             Write-Host "Preparing to download audio... This may take a while." -ForegroundColor Green
             $formatStringForDownload = "bestaudio"
             $ytDlpArgsForDownload.Add("-f"); $ytDlpArgsForDownload.Add($formatStringForDownload)
             $ytDlpArgsForDownload.Add("--extract-audio"); $ytDlpArgsForDownload.Add("--audio-format"); $ytDlpArgsForDownload.Add("mp3")
         }
-        $ytDlpArgsForDownload.Add($currentUrl)
-
-        $downloadProcessOutputLines = @()
-        Write-Host "Executing yt-dlp for download..." -ForegroundColor DarkGray
+        $ytDlpArgsForDownload.Add($currentUrl) 
+        
+        $downloadProcessOutputLines = @() 
+        Write-Host "Executing yt-dlp for download..." -ForegroundColor DarkGray 
         Write-ErrorLog "Executing Download: `"$ytDlpPath`" $($ytDlpArgsForDownload -join ' ')"
-
-        $exitCodeDownload = -1
+        
+        $exitCodeDownload = -1 
         try {
-            $downloadProcessOutputLines = & $ytDlpPath $ytDlpArgsForDownload 2>&1
+            $downloadProcessOutputLines = & $ytDlpPath $ytDlpArgsForDownload 2>&1 
             $exitCodeDownload = $LASTEXITCODE
         } catch {
             $logMsg = "Critical error executing yt-dlp for download. Command: `"$ytDlpPath`" $($ytDlpArgsForDownload -join ' '). Exception: $($_.Exception.ToString())"
@@ -311,84 +311,32 @@ do {
             Write-ErrorLog "yt-dlp download process completed successfully. Exit Code: $exitCodeDownload."
             $downloadOutputStringForParsing = $downloadProcessOutputLines -join [System.Environment]::NewLine
             $downloadedFileInTemp = $null
+            $tempFilesList = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
 
-            $PrimaryPatterns = @(
-                [regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"',
-                [regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$',
-                [regex]'\[download\] Destination: (?<FileNameFromOutput>.*?)$',
-                [regex]'\[download\] (?<FileNameFromOutput>.*?) has already been downloaded'
-            )
+            Write-ErrorLog "Attempting to find downloaded file. Method 1: Based on videoInfo.title."
+            if ($videoInfo -and $videoInfo.title) {
+                $expectedFileExtension = if ($isAudioOnlySelected) { ".mp3" } else { ".mp4" }
+                $normalizedExpectedNameFromTitle = Convert-FileNameToComparable ($videoInfo.title + $expectedFileExtension)
+                Write-ErrorLog "Method 1: Normalized expected name from title: `"$normalizedExpectedNameFromTitle`""
 
-            foreach ($pattern in $PrimaryPatterns) {
-                $match = $pattern.Match($downloadOutputStringForParsing)
-                if ($match.Success) {
-                    $filePathFromOutputRaw = $match.Groups["FileNameFromOutput"].Value.Trim()
-                    $fileNameFromOutputRawLeaf = Split-Path $filePathFromOutputRaw -Leaf
-
-                    if (-not $fileNameFromOutputRawLeaf) {
-                        Write-ErrorLog "Could not extract leaf name from raw path reported by yt-dlp pattern '$($pattern.ToString())': $filePathFromOutputRaw"
-                        continue
-                    }
-
-                    $normalizedFileNameFromOutputLeaf = Convert-FileNameToComparable $fileNameFromOutputRawLeaf
-                    Write-ErrorLog "Normalized leaf from yt-dlp output pattern '$($pattern.ToString())' is: `"$normalizedFileNameFromOutputLeaf`" (Original raw leaf: `"$fileNameFromOutputRawLeaf`")"
-
-                    $tempFilesListForThisCheck = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
-                    if ($tempFilesListForThisCheck) {
-                        foreach ($fileInTempActual in $tempFilesListForThisCheck) {
-                            $normalizedActualFileInTempLeaf = Convert-FileNameToComparable $fileInTempActual.Name
-                            if ($normalizedActualFileInTempLeaf -eq $normalizedFileNameFromOutputLeaf) {
-                                $downloadedFileInTemp = $fileInTempActual.FullName
-                                Write-ErrorLog "File confirmed by normalized matching of yt-dlp output leaf: $downloadedFileInTemp. Matched '$normalizedActualFileInTempLeaf' with '$normalizedFileNameFromOutputLeaf'."
-                                break
-                            }
+                if ($tempFilesList) {
+                    foreach ($fileInTempDir in $tempFilesList) {
+                        $normalizedActualFileInTempName = Convert-FileNameToComparable $fileInTempDir.Name
+                        if ($normalizedActualFileInTempName -eq $normalizedExpectedNameFromTitle) {
+                            $downloadedFileInTemp = $fileInTempDir.FullName
+                            Write-ErrorLog "Method 1: File found by title-based normalized comparison: $downloadedFileInTemp"
+                            break
                         }
                     }
-                    if ($downloadedFileInTemp) { break }
+                } else {
+                    Write-ErrorLog "Method 1: No files found in Temp directory for comparison."
                 }
+            } else {
+                Write-ErrorLog "Method 1: videoInfo or videoInfo.title is null, cannot use title-based comparison."
             }
-            
-            if (-not $downloadedFileInTemp) {
-                 Write-ErrorLog "Primary pattern matching (revised) from download output failed. Trying normalized name comparison for files in Temp using video title..."
-                 $tempFilesList = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
-                 $expectedFinalFileNamePatternFromOutput = ""
 
-                 $mergerMatchForTitle = ([regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"').Match($downloadOutputStringForParsing)
-                 $extractAudioMatchForTitle = ([regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$').Match($downloadOutputStringForParsing)
-
-                 if ($mergerMatchForTitle.Success) { 
-                    $expectedFinalFileNamePatternFromOutput = Split-Path ($mergerMatchForTitle.Groups["FileNameFromOutput"].Value.Trim()) -Leaf 
-                    Write-ErrorLog "For title-based fallback, using leaf from Merger: $expectedFinalFileNamePatternFromOutput"
-                 }
-                 elseif ($extractAudioMatchForTitle.Success) { 
-                    $expectedFinalFileNamePatternFromOutput = Split-Path ($extractAudioMatchForTitle.Groups["FileNameFromOutput"].Value.Trim()) -Leaf 
-                    Write-ErrorLog "For title-based fallback, using leaf from ExtractAudio: $expectedFinalFileNamePatternFromOutput"
-                 }
-                 else { 
-                    $expectedFinalFileNamePatternFromOutput = $videoInfo.title + (if ($isAudioOnlySelected) {".mp3"} else {".mp4"})
-                    Write-ErrorLog "For title-based fallback, constructed name from videoInfo.title: $expectedFinalFileNamePatternFromOutput"
-                 }
-                 
-                 if ($expectedFinalFileNamePatternFromOutput) {
-                     $normalizedExpectedName = Convert-FileNameToComparable $expectedFinalFileNamePatternFromOutput
-                     Write-ErrorLog "Normalized expected name for comparison (from title/fallback): `"$normalizedExpectedName`""
-                     if ($tempFilesList) {
-                         foreach ($fileInTempDir in $tempFilesList) {
-                             $normalizedFileInTempDirName = Convert-FileNameToComparable $fileInTempDir.Name
-                             if ($normalizedFileInTempDirName -eq $normalizedExpectedName) {
-                                 $downloadedFileInTemp = $fileInTempDir.FullName
-                                 Write-ErrorLog "File re-confirmed by normalized name comparison (from title/fallback): $downloadedFileInTemp"
-                                 break
-                             }
-                         }
-                     } else {
-                        Write-ErrorLog "Temp directory is empty or inaccessible for title-based fallback check."
-                     }
-                 }
-            }
-            
             if (-not $downloadedFileInTemp) {
-                Write-ErrorLog "Normalized name comparison (from title/fallback) also failed. Trying yt-dlp --print filename..."
+                Write-ErrorLog "Method 1 failed. Attempting Method 2: Based on yt-dlp --print filename."
                 $ytDlpArgsForPrint = New-Object System.Collections.Generic.List[string]
                 $ytDlpArgsForPrint.Add("--no-download"); $ytDlpArgsForPrint.Add("--no-warnings"); $ytDlpArgsForPrint.Add("--print"); $ytDlpArgsForPrint.Add("filename")
                 $ytDlpArgsForPrint.Add("-o"); $ytDlpArgsForPrint.Add($ytdlpOutputTemplate)
@@ -398,46 +346,65 @@ do {
                     $ytDlpArgsForPrint.Add("-f"); $ytDlpArgsForPrint.Add("bestaudio"); $ytDlpArgsForPrint.Add("--extract-audio"); $ytDlpArgsForPrint.Add("--audio-format"); $ytDlpArgsForPrint.Add("mp3")
                 }
                 $ytDlpArgsForPrint.Add($currentUrl)
-                Write-ErrorLog "Executing Print Filename: `"$ytDlpPath`" $($ytDlpArgsForPrint -join ' ')"
+                Write-ErrorLog "Method 2: Executing Print Filename: `"$ytDlpPath`" $($ytDlpArgsForPrint -join ' ')"
                 $determinedPathArray = & $ytDlpPath $ytDlpArgsForPrint 2>$null 
                 
                 if ($LASTEXITCODE -eq 0 -and $determinedPathArray -and $determinedPathArray.Count -gt 0) {
                     $determinedPathRaw = ($determinedPathArray | Select-Object -First 1).Trim()
                     $determinedLeaf = Split-Path $determinedPathRaw -Leaf
-                    $normalizedDeterminedLeaf = Convert-FileNameToComparable $determinedLeaf
-                    Write-ErrorLog "yt-dlp --print filename provided leaf '$determinedLeaf', normalized to '$normalizedDeterminedLeaf'. Raw full path: '$determinedPathRaw'"
-                    
-                    # Compare normalized --print filename leaf with normalized actual files in Temp
-                    $tempFilesListForPrintCheck = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
-                    if ($tempFilesListForPrintCheck) {
-                        foreach ($fileInTempActual_Print in $tempFilesListForPrintCheck) {
-                            $normalizedActualFileInTempLeaf_Print = Convert-FileNameToComparable $fileInTempActual_Print.Name
-                            if ($normalizedActualFileInTempLeaf_Print -eq $normalizedDeterminedLeaf) {
-                                $downloadedFileInTemp = $fileInTempActual_Print.FullName
-                                Write-ErrorLog "File confirmed by --print filename and normalized comparison: $downloadedFileInTemp"
-                                break 
+                    if ($determinedLeaf) {
+                        $normalizedDeterminedLeaf = Convert-FileNameToComparable $determinedLeaf
+                        Write-ErrorLog "Method 2: --print filename provided leaf '$determinedLeaf', normalized to '$normalizedDeterminedLeaf'. Raw path: '$determinedPathRaw'"
+                        if ($tempFilesList) {
+                            foreach ($fileInTempDir_Print in $tempFilesList) {
+                                $normalizedActualFileInTemp_Print = Convert-FileNameToComparable $fileInTempDir_Print.Name
+                                if ($normalizedActualFileInTemp_Print -eq $normalizedDeterminedLeaf) {
+                                    $downloadedFileInTemp = $fileInTempDir_Print.FullName
+                                    Write-ErrorLog "Method 2: File confirmed by --print filename and normalized comparison: $downloadedFileInTemp"
+                                    break 
+                                }
                             }
                         }
-                    }
+                        if (-not $downloadedFileInTemp -and (Test-Path $determinedPathRaw) -and ($determinedPathRaw -like "$tempDir\*")) {
+                             $downloadedFileInTemp = $determinedPathRaw
+                             Write-ErrorLog "Method 2: File confirmed by --print filename using direct Test-Path on its raw output: $downloadedFileInTemp."
+                        }
+                    } else { Write-ErrorLog "Method 2: Could not extract leaf from --print filename output: '$determinedPathRaw'" }
+                } else { Write-ErrorLog "Method 2: yt-dlp --print filename command failed. Exit: $LASTEXITCODE. Output: $($determinedPathArray -join ', ')"}
+            }
 
-                    if (-not $downloadedFileInTemp -and (Test-Path $determinedPathRaw)) {
-                        $downloadedFileInTemp = $determinedPathRaw
-                        Write-ErrorLog "File confirmed by --print filename (direct Test-Path on raw path): $downloadedFileInTemp. This was a fallback."
-                    } elseif (-not $downloadedFileInTemp) {
-                         Write-ErrorLog "Normalized comparison for --print filename failed, and direct Test-Path on '$determinedPathRaw' also failed."
-                         $expectedExtension = if ($isAudioOnlySelected) { ".mp3" } else { ".mp4" }
-                         $baseName = [System.IO.Path]::GetFileNameWithoutExtension($determinedPathRaw)
-                         $potentialFileWithCorrectExt = Join-Path $tempDir ($baseName + $expectedExtension)
-                         if (Test-Path $potentialFileWithCorrectExt) {
-                             $downloadedFileInTemp = $potentialFileWithCorrectExt
-                             Write-ErrorLog "Corrected extension from --print filename. Found: $downloadedFileInTemp. Original print: $determinedPathRaw"
-                         } else {
-                             Write-ErrorLog "yt-dlp --print filename provided '$determinedPathRaw' (or corrected '$potentialFileWithCorrectExt'), but file does not exist in Temp folder via Test-Path."
-                         }
-                    }
+            if (-not $downloadedFileInTemp) {
+                Write-ErrorLog "Methods 1 & 2 failed. Attempting Method 3: Based on parsing specific output lines (e.g., [Merger] or [ExtractAudio])."
+                $patternForMethod3 = $null
+                if (-not $isAudioOnlySelected) {
+                    $patternForMethod3 = [regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"'
                 } else {
-                     Write-ErrorLog "yt-dlp --print filename command failed or returned no output. Exit Code: $LASTEXITCODE. Output: $($determinedPathArray -join ', ')"
+                    $patternForMethod3 = [regex]'\[ExtractAudio\] Destination: (?<FileNameFromOutput>.*?)$'
                 }
+                
+                $matchMethod3 = $patternForMethod3.Match($downloadOutputStringForParsing)
+                if ($matchMethod3.Success) {
+                    $filePathFromRegex = $matchMethod3.Groups["FileNameFromOutput"].Value.Trim()
+                    $fileLeafFromRegex = Split-Path $filePathFromRegex -Leaf
+                    if ($fileLeafFromRegex) {
+                        $normalizedLeafFromRegex = Convert-FileNameToComparable $fileLeafFromRegex
+                        Write-ErrorLog "Method 3: Using pattern '$($patternForMethod3.ToString())'. Reported leaf: '$fileLeafFromRegex', normalized: '$normalizedLeafFromRegex'. Raw path: '$filePathFromRegex'"
+                        if ($tempFilesList) {
+                            foreach ($fileInTempDir_Regex in $tempFilesList) {
+                                $normalizedActualFileInTemp_Regex = Convert-FileNameToComparable $fileInTempDir_Regex.Name
+                                if ($normalizedActualFileInTemp_Regex -eq $normalizedLeafFromRegex) {
+                                    $downloadedFileInTemp = $fileInTempDir_Regex.FullName
+                                    Write-ErrorLog "Method 3: File confirmed by regex pattern output and normalized comparison: $downloadedFileInTemp"
+                                    break
+                                }
+                            }
+                        }
+                        if (-not $downloadedFileInTemp -and (Test-Path $filePathFromRegex) -and ($filePathFromRegex -like "$tempDir\*")) {
+                             $downloadedFileInTemp = $filePathFromRegex
+                             Write-ErrorLog "Method 3: File confirmed by regex pattern output using direct Test-Path on its raw output: $downloadedFileInTemp."
+                        }
+                    } else { Write-ErrorLog "Method 3: Could not extract leaf from regex pattern output: '$filePathFromRegex'" }
+                } else { Write-ErrorLog "Method 3: Pattern '$($patternForMethod3.ToString())' not found in yt-dlp output." }
             }
 
             if ($downloadedFileInTemp -and (Test-Path $downloadedFileInTemp)) {
@@ -454,15 +421,14 @@ do {
                     Write-ErrorLog "Successfully moved '$downloadedFileInTemp' to '$destinationPath'."
                 } catch {
                     $logMsg = "Move-Item failed. Source: '$downloadedFileInTemp', Dest: '$destinationPath'. Exception: $($_.Exception.ToString())"
-                    Resolve-ScriptError -UserMessage "Failed to move the downloaded file from Temp to the '$destinationDir' folder. The file may still be in the 'Temp' folder. This can sometimes happen with special characters in filenames." `
+                    Resolve-ScriptError -UserMessage "Failed to move the downloaded file from Temp to the '$destinationDir' folder. The file may still be in the 'Temp' folder." `
                                        -InternalLogMessage $logMsg
                 }
             } else {
                 $logMsg = "yt-dlp download process completed (Exit Code $exitCodeDownload), but script could not identify/locate the downloaded file in '$tempDir' after all attempts. Full download output for parsing was: $downloadOutputStringForParsing"
                 Resolve-ScriptError -UserMessage "Download seemed to complete (check console), but the script could not find the final file in 'Temp' to move it. Please check 'Temp' folder." `
                                    -InternalLogMessage $logMsg
-                $tempFiles = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
-                if ($tempFiles) { Write-Host "Files currently in '$tempDir': $( ($tempFiles).Name -join ', ' )" -ForegroundColor Yellow }
+                if ($tempFilesList) { Write-Host "Files currently in '$tempDir': $( ($tempFilesList).Name -join ', ' )" -ForegroundColor Yellow }
             }
         } else { 
             $logMsg = "yt-dlp download process failed with Exit Code: $exitCodeDownload. URL: $currentUrl. Args: $($ytDlpArgsForDownload -join ' '). Output: $($downloadProcessOutputLines -join [System.Environment]::NewLine)"
