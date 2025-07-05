@@ -1,4 +1,35 @@
 @echo off
+title Simple YouTube Downloader (SYD) - Menu
+color 0A
+cls
+
+:MENU
+echo.
+echo ========================================
+echo     Simple YouTube Downloader (SYD)
+echo            by MBNPRO
+echo ========================================
+echo.
+echo Choose an option:
+echo.
+echo 1. Run SYD (Download latest version and launch)
+echo 2. Exit
+echo.
+set /p choice=Enter your choice (1-2): 
+
+if "%choice%"=="1" goto DOWNLOAD_RUN
+if "%choice%"=="2" goto EXIT
+echo Invalid choice! Please enter 1 or 2.
+pause
+goto MENU
+
+:DOWNLOAD_RUN
+cls
+echo.
+echo ========================================
+echo     Downloading Latest SYD Version
+echo ========================================
+echo.
 set SCRIPT_URL="https://github.com/MBNpro-ir/syd/releases/latest/download/syd.ps1"
 set LOCAL_SCRIPT_NAME="syd_latest.ps1"
 
@@ -10,7 +41,7 @@ if not exist %LOCAL_SCRIPT_NAME% (
     echo Please check your internet connection and ensure the URL is correct:
     echo %SCRIPT_URL%
     pause
-    exit /b 1
+    goto MENU
 )
 
 echo Download complete. Launching syd.ps1...
@@ -18,5 +49,15 @@ echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File %LOCAL_SCRIPT_NAME%
 
 echo.
-echo Script execution finished. Press any key to close this window.
+echo Script execution finished.
 pause
+goto MENU
+
+:EXIT
+cls
+echo.
+echo Thank you for using Simple YouTube Downloader (SYD)!
+echo Visit: https://github.com/MBNpro-ir/syd
+echo.
+pause
+exit
