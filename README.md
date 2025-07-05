@@ -268,8 +268,30 @@ Files are automatically organized in the `Downloaded` folder:
 
 ## ⚙️ Advanced Configuration
 
-### **Settings.json Configuration**
-The script automatically creates a `settings.json` file for advanced users:
+### **📁 File Locations & Access**
+
+**After running `syd.bat`, your files will be organized as follows:**
+
+```
+📁 Your Project Folder/
+├── 📄 syd.bat                    # Main launcher file
+├── 📁 SYD/                       # Auto-created folder
+│   ├── 📄 syd_latest.ps1         # Latest downloaded script
+│   ├── 📄 settings.json          # Configuration file
+│   ├── 📄 cookies.txt            # YouTube cookies (if added)
+│   ├── 📄 debug.txt              # Debug/error logs
+│   └── 📄 video_cache.json       # Video information cache
+├── 📁 Downloaded/                # Your downloaded content
+│   ├── 📁 Video/                 # Video files
+│   ├── 📁 Audio/                 # Audio files
+│   └── 📁 Covers/                # Thumbnail images
+├── 📁 Temp/                      # Temporary files (auto-cleaned)
+└── 📄 logo.png                   # Downloaded logo for shortcut
+```
+
+### **🔧 Settings.json Configuration**
+
+**Location:** `SYD/settings.json` (created automatically after first run)
 
 ```json
 {
@@ -303,22 +325,256 @@ The script automatically creates a `settings.json` file for advanced users:
 }
 ```
 
-### **Cookie Setup for Private Content**
-1. **Export cookies** from your browser using a cookie extension
-2. **Save as** `cookies.txt` in the script directory
-3. **Enable cookies** in settings.json (`"use_cookies": true`)
-4. **Download private/age-restricted content** seamlessly
+### **🍪 Complete Cookie Setup Guide**
 
-### **Proxy Configuration**
+**🎯 Why Use Cookies?**
+- Download age-restricted videos (18+)
+- Access private/unlisted videos
+- Download member-only content
+- Bypass regional restrictions
+- Avoid rate limiting
+
+#### **📋 Step-by-Step Cookie Setup:**
+
+**Step 1: Install Browser Extension**
+- **Chrome/Edge**: Install "Get cookies.txt LOCALLY" extension
+- **Firefox**: Install "cookies.txt" extension
+- **Alternative**: Use "Cookie-Editor" extension
+
+**Step 2: Login to YouTube**
+1. Open YouTube in your browser
+2. Login to your account
+3. Make sure you can access age-restricted content
+
+**Step 3: Export Cookies**
+1. **Go to any YouTube page** (e.g., youtube.com)
+2. **Click the extension icon** in your browser toolbar
+3. **Select "Export"** or "Get cookies.txt"
+4. **Choose format**: Netscape format (cookies.txt)
+5. **Save the file** as `cookies.txt`
+
+**Step 4: Place Cookie File**
+```
+📁 Your Project Folder/
+├── 📄 syd.bat
+└── 📁 SYD/
+    ├── 📄 cookies.txt    ← Place your cookie file HERE
+    └── 📄 settings.json
+```
+
+**⚠️ Important:** The cookie file must be named exactly `cookies.txt` and placed in the `SYD` folder.
+
+**Step 5: Enable Cookies in Settings**
+1. **Navigate to:** `SYD/settings.json`
+2. **Open with:** Notepad, VSCode, or any text editor
+3. **Find the cookies section:**
+```json
+"cookies": {
+  "use_cookies": true,           ← Make sure this is true
+  "cookie_file_path": "cookies.txt"
+}
+```
+4. **Save the file**
+
+**Step 6: Test the Setup**
+1. **Run** `syd.bat`
+2. **Try downloading** an age-restricted video
+3. **Check** if it works without asking for login
+
+#### **🔄 Alternative Cookie Locations**
+
+**Option 1: Default Location (Recommended)**
+```
+SYD/cookies.txt
+```
+
+**Option 2: Custom Directory**
+```json
+"cookies": {
+  "use_cookies": true,
+  "cookie_file_path": "cookies.txt",
+  "cookie_file_directory": "C:\\Users\\YourName\\Documents\\Cookies"
+}
+```
+
+**Option 3: Full Path**
+```json
+"cookies": {
+  "use_cookies": true,
+  "cookie_file_path": "C:\\Users\\YourName\\Desktop\\my-cookies.txt"
+}
+```
+
+#### **🛠️ Troubleshooting Cookies**
+
+**❌ "Cookie file not found"**
+- Check file location: `SYD/cookies.txt`
+- Ensure filename is exactly `cookies.txt`
+- Check file is not empty (should be several KB)
+
+**❌ "Still asking for login"**
+- Cookies might be expired - re-export from browser
+- Make sure you were logged in when exporting
+- Try different browser or incognito mode
+
+**❌ "Access denied errors"**
+- Re-login to YouTube and export fresh cookies
+- Check if your YouTube account can access the content
+- Try using VPN if content is region-blocked
+
+#### **🔒 Cookie Security Tips**
+
+**⚠️ Security Warning:**
+- Cookies contain your login information
+- Don't share cookie files with others
+- Regenerate cookies if compromised
+- Delete old cookie files regularly
+
+**🔄 Cookie Maintenance:**
+- **Refresh cookies** every 30-60 days
+- **Re-export** if you change YouTube password
+- **Update** if you notice authentication issues
+
+### **🌐 Proxy Configuration Guide**
+
+**🏢 Corporate Networks & Firewalls**
+
+If you're behind a corporate firewall or need to use a proxy:
+
+#### **📋 Proxy Setup Steps:**
+
+**Step 1: Find Your Proxy Settings**
+- **Windows**: Settings → Network & Internet → Proxy
+- **Corporate IT**: Ask your IT department for proxy details
+- **Manual**: Check browser proxy settings
+
+**Step 2: Configure in Settings.json**
 ```json
 {
   "proxy": {
-    "custom_proxy_enabled": true,
-    "custom_proxy_host": "proxy.company.com",
-    "custom_proxy_port": 8080
+    "use_system_proxy": true,        ← Try this first
+    "custom_proxy_enabled": false,   ← Enable if system proxy doesn't work
+    "custom_proxy_host": "",         ← Your proxy server
+    "custom_proxy_port": "",         ← Your proxy port
+    "custom_proxy_username": "",     ← If authentication required
+    "custom_proxy_password": ""      ← If authentication required
   }
 }
 ```
+
+#### **🔧 Proxy Configuration Examples:**
+
+**Option 1: Use System Proxy (Recommended)**
+```json
+{
+  "proxy": {
+    "use_system_proxy": true,
+    "custom_proxy_enabled": false
+  }
+}
+```
+
+**Option 2: Custom HTTP Proxy**
+```json
+{
+  "proxy": {
+    "use_system_proxy": false,
+    "custom_proxy_enabled": true,
+    "custom_proxy_host": "proxy.company.com",
+    "custom_proxy_port": "8080"
+  }
+}
+```
+
+**Option 3: Authenticated Proxy**
+```json
+{
+  "proxy": {
+    "use_system_proxy": false,
+    "custom_proxy_enabled": true,
+    "custom_proxy_host": "proxy.company.com",
+    "custom_proxy_port": "8080",
+    "custom_proxy_username": "your_username",
+    "custom_proxy_password": "your_password"
+  }
+}
+```
+
+#### **🛠️ Proxy Troubleshooting**
+
+**❌ "Connection timeout"**
+- Verify proxy host and port are correct
+- Check if proxy requires authentication
+- Try `use_system_proxy: true` first
+
+**❌ "Proxy authentication failed"**
+- Double-check username and password
+- Some proxies use domain\\username format
+- Contact IT department for correct credentials
+
+**❌ "Downloads still failing"**
+- Try disabling proxy temporarily
+- Check if YouTube is blocked by firewall
+- Use VPN as alternative
+
+### **📊 Other Settings Explained**
+
+#### **🚀 Performance Settings**
+```json
+{
+  "general": {
+    "request_timeout_seconds": 30,    ← Increase for slow connections
+    "max_retries": 5,                 ← More retries for reliability
+    "use_database_cache": true        ← Faster repeated downloads
+  }
+}
+```
+
+#### **📁 Custom Download Locations**
+```json
+{
+  "download": {
+    "temp_directory": "Temp",
+    "output_directory": "Downloaded",
+    "video_subdirectory": "Video",
+    "audio_subdirectory": "Audio",
+    "covers_subdirectory": "Covers"
+  }
+}
+```
+
+#### **🔍 Debug & Logging**
+```json
+{
+  "advanced": {
+    "enable_debug_logging": true,     ← Enable for troubleshooting
+    "cleanup_temp_files": true,       ← Auto-clean temporary files
+    "log_file_path": "debug.txt"      ← Where to save debug logs
+  }
+}
+```
+
+### **🔄 Settings File Management**
+
+**📍 Settings Location:** `SYD/settings.json`
+
+**✏️ How to Edit:**
+1. **Navigate to** your project folder
+2. **Open** `SYD/settings.json` with any text editor
+3. **Make changes** (be careful with JSON syntax)
+4. **Save** the file
+5. **Restart** SYD to apply changes
+
+**🔄 Reset to Defaults:**
+- Delete `SYD/settings.json`
+- Run `syd.bat` again
+- New settings file will be created with defaults
+
+**⚠️ JSON Syntax Tips:**
+- Use double quotes for strings: `"true"` not `'true'`
+- No trailing commas: `"item": "value"` not `"item": "value",`
+- Boolean values: `true` or `false` (no quotes)
+- Numbers: `30` not `"30"`
 
 ---
 
