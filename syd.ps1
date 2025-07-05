@@ -1007,6 +1007,58 @@ function Add-EnhancedHeaders {
     $ArgumentsList.Add("Sec-Fetch-Mode:navigate")
 }
 
+function Get-QualityPrefix {
+    param (
+        [string]$Type,
+        [object]$SelectedOption
+    )
+    
+    switch ($Type) {
+        "best" {
+            return "[Best]"
+        }
+        "combined" {
+            $format = $SelectedOption.Format
+            $height = $format.height
+            $ext = $format.ext
+            if (-not $height -and $format.resolution -and $format.resolution -match 'x') {
+                $height = ($format.resolution -split 'x')[1]
+            }
+            if ($height -and $ext) {
+                return "[${height}p-${ext}]"
+            }
+            return "[${format.format_id}]"
+        }
+        "specific_video" {
+            $format = $SelectedOption.Format
+            $height = $format.height
+            $ext = $format.ext
+            if (-not $height -and $format.resolution -and $format.resolution -match 'x') {
+                $height = ($format.resolution -split 'x')[1]
+            }
+            if ($height -and $ext) {
+                return "[${height}p-${ext}]"
+            }
+            return "[${format.format_id}]"
+        }
+        "mp3_conversion" {
+            $bitrate = $SelectedOption.Bitrate
+            return "[MP3-${bitrate}k]"
+        }
+        "specific_audio" {
+            $format = $SelectedOption.Format
+            if ($format.abr) {
+                return "[Audio-$($format.abr)k]"
+            } else {
+                return "[Audio-${format.format_id}]"
+            }
+        }
+        default {
+            return "[Download]"
+        }
+    }
+}
+
 function New-DownloadArguments {
     param (
         [string]$FfmpegPath,
@@ -1434,65 +1486,76 @@ function Initialize-Directory {
 
 function Convert-FileNameToComparable {
     param (
-        [string]$FileName,
-        [int]$MaxLength = 200
+        [string]$FileName
     )
+    if ([string]::IsNullOrWhiteSpace($FileName)) {
+        return ""
+    }
     
+    # Keep square brackets for quality prefixes
+    $invalidChars = '[{0}]' -f ([System.IO.Path]::GetInvalidFileNameChars() -replace '\[|\]', '' | ForEach-Object { [regex]::Escape($_) })
+    $cleanName = $FileName -replace $invalidChars, ''
+    
+    # Replace common separators with a space for better readability and consistency
+    $cleanName = $cleanName -replace '[\s\p{P}-[\]]]+', ' ' # Replace punctuation (except brackets) and whitespace with a single space
+    
+    return $cleanName.Trim()
+}
+
+function Clean-FileName {
+    param (
+        [string]$FileName
+    )
     if ([string]::IsNullOrWhiteSpace($FileName)) {
         return "untitled"
     }
     
-    # Normalize Unicode characters
-    $converted = $FileName.Normalize([System.Text.NormalizationForm]::FormC)
+    # Replace problematic Unicode characters with safe alternatives
+    $cleanName = $FileName
+    $cleanName = $cleanName.Replace('｜', '|')          # Fullwidth vertical bar to normal pipe
+    $cleanName = $cleanName.Replace('：', '-')          # Fullwidth colon
+    $cleanName = $cleanName.Replace('？', '')           # Fullwidth question mark
+    $cleanName = $cleanName.Replace('＜', '(')          # Fullwidth less than
+    $cleanName = $cleanName.Replace('＞', ')')          # Fullwidth greater than
+    $cleanName = $cleanName.Replace('＂', "'")          # Fullwidth quotation mark
+    $cleanName = $cleanName.Replace('＊', '-')          # Fullwidth asterisk
+    $cleanName = $cleanName.Replace('＼', '-')          # Fullwidth backslash
+    $cleanName = $cleanName.Replace('／', '-')          # Fullwidth forward slash
     
-    # Replace common Unicode lookalikes with ASCII equivalents
-    $converted = $converted.Replace('：', '-').Replace('｜', '-').Replace('？', '').Replace('＜', '(').Replace('＞', ')').Replace('＂', "'").Replace('＊', '-').Replace('＼', '-').Replace('／', '-')
+    # Replace other problematic characters
+    $cleanName = $cleanName.Replace('|', '-')           # Pipe to dash
+    $cleanName = $cleanName.Replace(':', '-')           # Colon to dash
+    $cleanName = $cleanName.Replace('?', '')            # Remove question marks
+    $cleanName = $cleanName.Replace('<', '(')           # Less than to parenthesis
+    $cleanName = $cleanName.Replace('>', ')')           # Greater than to parenthesis
+    $cleanName = $cleanName.Replace('"', "'")           # Double quote to single
+    $cleanName = $cleanName.Replace('*', '-')           # Asterisk to dash
+    $cleanName = $cleanName.Replace('\', '-')           # Backslash to dash
+    $cleanName = $cleanName.Replace('/', '-')           # Forward slash to dash
     
-    # Replace additional problematic characters
-    $converted = $converted.Replace(':', '-').Replace('|', '-').Replace('?', '').Replace('<', '(').Replace('>', ')').Replace('"', "'").Replace('*', '-').Replace('\', '-').Replace('/', '-')
-    $converted = $converted.Replace('[', '(').Replace(']', ')').Replace('{', '(').Replace('}', ')')
-    
-    # Remove or replace other invalid filename characters
-    $invalidChars = [System.IO.Path]::GetInvalidFileNameChars() + [System.IO.Path]::GetInvalidPathChars()
-    $invalidCharsRegexPattern = ($invalidChars | ForEach-Object {[System.Text.RegularExpressions.Regex]::Escape($_)}) -join '|'
-    
-    if ($invalidCharsRegexPattern) {
-        $converted = $converted -replace $invalidCharsRegexPattern, '_'
+    # Remove invalid filename characters
+    $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
+    foreach ($char in $invalidChars) {
+        $cleanName = $cleanName.Replace($char, '_')
     }
     
-    # Remove control characters and other problematic Unicode ranges
-    $converted = $converted -replace '[\x00-\x1F\x7F]', ''  # Control characters
-    $converted = $converted -replace '[\x80-\x9F]', ''     # Extended control characters
+    # Clean up multiple dashes and spaces
+    $cleanName = $cleanName -replace '\s+', ' '         # Multiple spaces to single
+    $cleanName = $cleanName -replace '-{2,}', '-'       # Multiple dashes to single
+    $cleanName = $cleanName -replace '_+', '_'          # Multiple underscores to single
     
-    # Clean up multiple spaces/underscores/dashes
-    $converted = $converted -replace '\s+', ' '            # Multiple spaces to single space
-    $converted = $converted -replace '_{2,}', '_'          # Multiple underscores to single
-    $converted = $converted -replace '-{2,}', '-'          # Multiple dashes to single
-    $converted = $converted -replace '[_\s\-]+$', ''       # Trailing underscores, spaces, dashes
-    $converted = $converted -replace '^[_\s\-]+', ''       # Leading underscores, spaces, dashes
-    
-    # Trim whitespace
-    $converted = $converted.Trim()
-    
-    # Ensure we have something
-    if ([string]::IsNullOrWhiteSpace($converted)) {
-        $converted = "video_" + (Get-Date -Format "yyyyMMdd_HHmmss")
+    # Trim and ensure it's not empty
+    $cleanName = $cleanName.Trim(' ', '-', '_')
+    if ([string]::IsNullOrWhiteSpace($cleanName)) {
+        $cleanName = "video_" + (Get-Date -Format "yyyyMMdd_HHmmss")
     }
     
-    # Limit length
-    if ($converted.Length -gt $MaxLength) {
-        $converted = $converted.Substring(0, $MaxLength).TrimEnd(' ', '-', '_')
+    # Limit length (Windows has 260 char path limit)
+    if ($cleanName.Length -gt 200) {
+        $cleanName = $cleanName.Substring(0, 200).Trim(' ', '-', '_')
     }
     
-    # Ensure it doesn't end with a period (Windows issue)
-    $converted = $converted.TrimEnd('.')
-    
-    # Final check - if empty, provide fallback
-    if ([string]::IsNullOrWhiteSpace($converted)) {
-        $converted = "untitled_" + (Get-Date -Format "yyyyMMdd_HHmmss")
-    }
-    
-    return $converted
+    return $cleanName
 }
 
 function Format-Bytes {
@@ -1844,7 +1907,6 @@ function Invoke-YtDlpSimple {
             # Variables for progress tracking
             $currentFileName = ""
             $lastProgress = -1
-            $currentStage = "download"
             
             # Execute yt-dlp directly and capture output line by line
             & $YtDlpPath $YtDlpArguments 2>&1 | ForEach-Object {
@@ -1889,7 +1951,6 @@ function Invoke-YtDlpSimple {
                     }
                     # Parse merging
                     elseif ($line -match '\[Merger\]') {
-                        $currentStage = "merge"
                         Show-CustomDownloadProgress -Activity "Merging" `
                                                   -Percentage 95 `
                                                   -FileName $currentFileName `
@@ -1897,7 +1958,6 @@ function Invoke-YtDlpSimple {
                     }
                     # Parse audio extraction
                     elseif ($line -match '\[ExtractAudio\]') {
-                        $currentStage = "process"
                         Show-CustomDownloadProgress -Activity "Extracting" `
                                                   -Percentage 90 `
                                                   -FileName $currentFileName `
@@ -2285,7 +2345,7 @@ Write-Host ""
 Write-Host "  📖 " -NoNewline; Write-Host "help, -h     " -NoNewline -ForegroundColor Cyan; Write-Host ": Show detailed help and guide" -ForegroundColor Gray
 Write-Host "  🚪 " -NoNewline; Write-Host "exit         " -NoNewline -ForegroundColor Cyan; Write-Host ": Exit the program" -ForegroundColor Gray
 Write-Host "  🗑️ " -NoNewline; Write-Host "clear-cache  " -NoNewline -ForegroundColor Cyan; Write-Host ": Clear video information cache" -ForegroundColor Gray
-Write-Host "  📁 " -NoNewline; Write-Host "folder       " -NoNewline -ForegroundColor Cyan; Write-Host ": Open program folder" -ForegroundColor Gray
+Write-Host "  📁 " -NoNewline; Write-Host "folder       " -NoNewline -ForegroundColor Cyan; Write-Host ": Open program folder in explorer" -ForegroundColor Gray
 Write-Host "  ⚙️ " -NoNewline; Write-Host "settings     " -NoNewline -ForegroundColor Cyan; Write-Host ": Open settings file" -ForegroundColor Gray
 Write-Host ""
 
@@ -2371,7 +2431,6 @@ do {
         $videoInfo = $null
         $maxRetries = [int]$settings.general.max_retries
         $retryCount = 0
-        $useLogin = $false
         
         while ($retryCount -lt $maxRetries -and $null -eq $videoInfo) {
             $retryCount++
@@ -2492,8 +2551,9 @@ do {
         if (-not $selectedOption) {
             Write-Host "Invalid selection. Please try again." -ForegroundColor Red
             continue
-        } 
-            $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\%(title)s.%(ext)s" 
+        }
+        
+ 
             $isVideoDownload = $false # Default to false
             $ytDlpArgsForDownload = $null
             $formatStringForDownload = "" # For filename prediction
@@ -2522,15 +2582,15 @@ do {
                         if (-not $coverExtension -or $coverExtension.Length -gt 5 -or $coverExtension.Length -lt 2) { $coverExtension = ".jpg" } 
 
                         $baseCoverName = Convert-FileNameToComparable $videoInfo.title
-                        $tempCoverFileName = $baseCoverName + $coverExtension
-                        $finalCoverFileName = $baseCoverName + $coverExtension 
+                        $tempCoverFileName = "[Cover] $baseCoverName$coverExtension"
+                        $finalCoverFileName = "[Cover] $baseCoverName$coverExtension" 
 
                         $tempCoverPath = Join-Path $tempDir $tempCoverFileName
                         $finalCoverPath = Join-Path $coversOutputDir $finalCoverFileName
                         
                         $counter = 1
                         while(Test-Path $finalCoverPath) { 
-                            $finalCoverFileName = "$($baseCoverName)_$($counter)$($coverExtension)"
+                            $finalCoverFileName = "[Cover] $($baseCoverName)_$($counter)$($coverExtension)"
                             $finalCoverPath = Join-Path $coversOutputDir $finalCoverFileName
                             $counter++
                         }
@@ -2588,11 +2648,12 @@ do {
                             # Alternative download method using yt-dlp
                             try {
                                 Write-Host "Attempting cover download using yt-dlp..." -ForegroundColor Yellow
+                                $coverOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\[Cover] %(title)s.%(ext)s"
                                 $coverArgs = @(
                                     "--write-thumbnail",
                                     "--skip-download",
                                     "--no-warnings",
-                                    "-o", $ytdlpOutputTemplate,
+                                    "-o", $coverOutputTemplate,
                                     $currentUrl
                                 )
                                 
@@ -2617,7 +2678,7 @@ do {
                                     $thumbnailFiles = Get-ChildItem -Path $tempDir -File | Where-Object { $_.Name -like "*$($baseCoverName)*" -and ($_.Extension -eq ".jpg" -or $_.Extension -eq ".png" -or $_.Extension -eq ".webp") }
                                     if ($thumbnailFiles) {
                                         $downloadedThumb = $thumbnailFiles[0]
-                                        $finalCoverPath = Join-Path $coversOutputDir "$($baseCoverName)$($downloadedThumb.Extension)"
+                                        $finalCoverPath = Join-Path $coversOutputDir "[Cover] $($baseCoverName)$($downloadedThumb.Extension)"
                                         Move-Item -Path $downloadedThumb.FullName -Destination $finalCoverPath -Force
                                         Write-Host "`nCover successfully downloaded using yt-dlp:" -ForegroundColor Green
                                         Write-Host "$finalCoverPath" -ForegroundColor Cyan
@@ -2651,6 +2712,8 @@ do {
                 
                 "best" {
                     $formatStringForDownload = "bestvideo+bestaudio/best"
+                    $qualityPrefix = Get-QualityPrefix -Type "best" -SelectedOption $selectedOption
+                    $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
                     Write-Host "Preparing to download best quality (merging best video + best audio)..." -ForegroundColor Green
                     
                     $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "video" -UseCookies $useCookies -CookieFilePath $cookieFilePath
@@ -2660,6 +2723,8 @@ do {
 
                 "combined" {
                     $formatStringForDownload = $selectedOption.Format.format_id
+                    $qualityPrefix = Get-QualityPrefix -Type "combined" -SelectedOption $selectedOption
+                    $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
                     Write-Host "Preparing to download combined format $formatStringForDownload..." -ForegroundColor Green
                     
                     $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "video" -UseCookies $useCookies -CookieFilePath $cookieFilePath
@@ -2670,6 +2735,8 @@ do {
                 "specific_video" {
                     $formatId = $selectedOption.Format.format_id
                     $formatStringForDownload = "$($formatId)+bestaudio/best"
+                    $qualityPrefix = Get-QualityPrefix -Type "specific_video" -SelectedOption $selectedOption
+                    $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
                     Write-Host "Preparing to download video format $formatId (merged with best audio)..." -ForegroundColor Green
                     
                     $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "video" -UseCookies $useCookies -CookieFilePath $cookieFilePath
@@ -2680,6 +2747,8 @@ do {
                 "mp3_conversion" {
                     $bitrate = $selectedOption.Bitrate
                     $formatStringForDownload = "bestaudio/best"
+                    $qualityPrefix = Get-QualityPrefix -Type "mp3_conversion" -SelectedOption $selectedOption
+                    $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
                     Write-Host "Preparing to download best audio and convert to MP3 at $($bitrate)k..." -ForegroundColor Green
                     
                     $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "audio" -Bitrate $bitrate -UseCookies $useCookies -CookieFilePath $cookieFilePath
@@ -2690,6 +2759,8 @@ do {
                 "specific_audio" {
                     $formatId = $selectedOption.Format.format_id
                     $formatStringForDownload = $formatId
+                    $qualityPrefix = Get-QualityPrefix -Type "specific_audio" -SelectedOption $selectedOption
+                    $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
                     Write-Host "Preparing to download audio format $formatId and convert to MP3..." -ForegroundColor Green
                     
                     $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "audio_specific" -UseCookies $useCookies -CookieFilePath $cookieFilePath
@@ -2747,13 +2818,16 @@ do {
                     
                     Write-ErrorLog "Attempting to find downloaded file. Method 1: Based on videoInfo.title."
                     if ($videoInfo -and $videoInfo.title) {
-                        $normalizedExpectedNameFromTitle = Convert-FileNameToComparable ($videoInfo.title + $expectedFileExtension)
-                        Write-ErrorLog "Method 1: Normalized expected name from title: `"$normalizedExpectedNameFromTitle`""
+                        $qualityPrefixForSearch = Get-QualityPrefix -Type $selectedOption.Type -SelectedOption $selectedOption
+                        # Try to find the file by checking all files in temp directory
                         if ($tempFilesList) {
                             foreach ($fileInTempDir in $tempFilesList) {
-                                if ((Convert-FileNameToComparable $fileInTempDir.Name) -eq $normalizedExpectedNameFromTitle) {
+                                $fileName = $fileInTempDir.Name
+                                # Check if the file has the expected extension and contains the quality prefix
+                                if ($fileName.EndsWith($expectedFileExtension) -and 
+                                    $fileName.StartsWith($qualityPrefixForSearch)) {
                                     $downloadedFileInTemp = $fileInTempDir.FullName
-                                    Write-ErrorLog "Method 1: File found by title-based normalized comparison: $downloadedFileInTemp"
+                                    Write-ErrorLog "Method 1: File found by prefix matching: $downloadedFileInTemp"
                                     break
                                 }
                             }
@@ -2761,7 +2835,7 @@ do {
                     }
                     
                     if (-not $downloadedFileInTemp) {
-                        Write-ErrorLog "Methods 1 failed. Attempting Method 2: Based on parsing output."
+                        Write-ErrorLog "Method 1 failed. Attempting Method 2: Based on parsing output."
                         
                         if ($isVideoDownload) {
                             $patternForMethod2 = [regex]'\[Merger\] Merging formats into "(?<FileNameFromOutput>.*?)"'
@@ -2782,60 +2856,303 @@ do {
                         if ($matchMethod2.Success) {
                             $filePathFromRegex = $matchMethod2.Groups["FileNameFromOutput"].Value.Trim()
                             Write-ErrorLog "Method 2: Using pattern '$($patternForMethod2.ToString())'. Found path: '$filePathFromRegex'."
-                            if (Test-Path $filePathFromRegex) {
+                            if (Test-Path -LiteralPath $filePathFromRegex) {
                                 $downloadedFileInTemp = $filePathFromRegex
                                 Write-ErrorLog "Method 2: File confirmed by regex pattern: $downloadedFileInTemp"
                             }
                         }
                     }
                     
-                    if ($downloadedFileInTemp -and (Test-Path $downloadedFileInTemp)) {
-                        $fileNameOnly = Split-Path $downloadedFileInTemp -Leaf
+                    if (-not $downloadedFileInTemp) {
+                        Write-ErrorLog "Method 2 failed. Attempting Method 3: Find any file with correct extension."
+                        # As a last resort, find any file with the expected extension
+                        if ($tempFilesList) {
+                            foreach ($fileInTempDir in $tempFilesList) {
+                                if ($fileInTempDir.Name.EndsWith($expectedFileExtension)) {
+                                    $downloadedFileInTemp = $fileInTempDir.FullName
+                                    Write-ErrorLog "Method 3: File found by extension matching: $downloadedFileInTemp"
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    
+                    if ($downloadedFileInTemp -and (Test-Path -LiteralPath $downloadedFileInTemp)) {
+                        $originalFileName = Split-Path -Path $downloadedFileInTemp -Leaf
                         $destinationDir = if ($isVideoDownload) { $videoOutputDir } else { $audioOutputDir }
-                        $destinationPath = Join-Path $destinationDir $fileNameOnly
                         
-                        Write-ErrorLog "Attempting to move '$fileNameOnly' from '$downloadedFileInTemp' to '$destinationDir'..."
+                        # First move with original name, then rename
+                        $tempDestinationPath = Join-Path $destinationDir $originalFileName
+                        
+                        # Extract the quality prefix and clean the rest of the filename for final name
+                        if ($originalFileName -match '^(\[[^\]]+\])\s*(.+)$') {
+                            $qualityPrefix = $matches[1]
+                            $titlePart = $matches[2]
+                            $extension = [System.IO.Path]::GetExtension($titlePart)
+                            $titleWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($titlePart)
+                            
+                            # Clean the title part
+                            $cleanTitle = Clean-FileName $titleWithoutExt
+                            $cleanFileName = "$qualityPrefix $cleanTitle$extension"
+                        } else {
+                            # Fallback: clean the entire filename
+                            $extension = [System.IO.Path]::GetExtension($originalFileName)
+                            $nameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($originalFileName)
+                            $cleanName = Clean-FileName $nameWithoutExt
+                            $cleanFileName = "$cleanName$extension"
+                        }
+                        
+                        $finalDestinationPath = Join-Path $destinationDir $cleanFileName
+                        
+                        Write-ErrorLog "Original filename: '$originalFileName'"
+                        Write-ErrorLog "Cleaned filename: '$cleanFileName'"
+                        Write-ErrorLog "Source path: '$downloadedFileInTemp'"
+                        Write-ErrorLog "Temp destination: '$tempDestinationPath'"
+                        Write-ErrorLog "Final destination: '$finalDestinationPath'"
+                        Write-ErrorLog "Attempting to move file..."
                         try {
-                            Move-Item -Path $downloadedFileInTemp -Destination $destinationPath -Force -ErrorAction Stop
-                            $fileType = if ($isVideoDownload) { "Video" } else { "Audio" }
-                            $fileIcon = if ($isVideoDownload) { "🎥" } else { "🎵" }
-                            Write-Host ""
-                            Write-Host "✅ SUCCESS!" -ForegroundColor Green
-                            Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-                            Write-Host "${fileIcon} ${fileType}: " -NoNewline -ForegroundColor Yellow
-                            Write-Host "$fileNameOnly" -ForegroundColor White
-                            Write-Host "📁 Location: " -NoNewline -ForegroundColor Yellow
-                            Write-Host "$destinationPath" -ForegroundColor Cyan
-                            Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-                            Write-ErrorLog "Successfully moved $fileType '$downloadedFileInTemp' to '$destinationPath'."
+                            # Use a two-step approach: move then rename
+                            $moveSuccessful = $false
+                            $moveError = $null
+                            
+                            # Step 1: Move file with original name
+                            Write-ErrorLog "Step 1: Moving file with original name"
+                            try {
+                                Move-Item -LiteralPath $downloadedFileInTemp -Destination $tempDestinationPath -Force -ErrorAction Stop
+                                Write-ErrorLog "Move-Item command completed, checking result..."
+                                Start-Sleep -Milliseconds 1000  # Give filesystem more time
+                                
+                                # Check if file exists at destination using multiple methods
+                                $fileExists = $false
+                                try {
+                                    $fileExists = Test-Path -LiteralPath $tempDestinationPath
+                                    Write-ErrorLog "Test-Path result: $fileExists"
+                                } catch {
+                                    Write-ErrorLog "Test-Path failed: $($_.Exception.Message)"
+                                }
+                                
+                                # Also try Get-Item as backup verification
+                                if (-not $fileExists) {
+                                    try {
+                                        $item = Get-Item -LiteralPath $tempDestinationPath -ErrorAction Stop
+                                        if ($item) {
+                                            $fileExists = $true
+                                            Write-ErrorLog "Get-Item found the file"
+                                        }
+                                    } catch {
+                                        Write-ErrorLog "Get-Item also failed: $($_.Exception.Message)"
+                                    }
+                                }
+                                
+                                if ($fileExists) {
+                                    Write-ErrorLog "Step 1 succeeded: File moved to temp destination"
+                                    $moveSuccessful = $true
+                                } else {
+                                    Write-ErrorLog "Step 1 failed: File not found at destination after Move-Item"
+                                    throw "File not found at destination after move"
+                                }
+                            } catch {
+                                $moveError = $_.Exception.Message
+                                Write-ErrorLog "Step 1 failed with Move-Item: $moveError"
+                                
+                                # Try Copy + Delete approach for step 1
+                                try {
+                                    Write-ErrorLog "Step 1 fallback: Copy + Delete method"
+                                    Copy-Item -LiteralPath $downloadedFileInTemp -Destination $tempDestinationPath -Force -ErrorAction Stop
+                                    Start-Sleep -Milliseconds 1000
+                                    
+                                    if (Test-Path -LiteralPath $tempDestinationPath) {
+                                        Remove-Item -LiteralPath $downloadedFileInTemp -Force -ErrorAction Stop
+                                        Write-ErrorLog "Step 1 fallback succeeded"
+                                        $moveSuccessful = $true
+                                    } else {
+                                        Write-ErrorLog "Step 1 fallback failed: File not found after copy"
+                                    }
+                                } catch {
+                                    Write-ErrorLog "Step 1 fallback also failed: $($_.Exception.Message)"
+                                }
+                            }
+                            
+                            # Step 2: Rename to clean filename (only if names are different)
+                            if ($moveSuccessful -and ($originalFileName -ne $cleanFileName)) {
+                                try {
+                                    Write-ErrorLog "Step 2: Renaming to clean filename"
+                                    Rename-Item -LiteralPath $tempDestinationPath -NewName $cleanFileName -Force -ErrorAction Stop
+                                    Start-Sleep -Milliseconds 1000
+                                    
+                                    # Verify rename with multiple methods
+                                    $renameSuccess = $false
+                                    try {
+                                        $renameSuccess = Test-Path -LiteralPath $finalDestinationPath
+                                        Write-ErrorLog "Rename verification with Test-Path: $renameSuccess"
+                                    } catch {
+                                        Write-ErrorLog "Rename verification failed: $($_.Exception.Message)"
+                                    }
+                                    
+                                    if ($renameSuccess) {
+                                        Write-ErrorLog "Step 2 succeeded: File renamed successfully"
+                                        $destinationPath = $finalDestinationPath
+                                        $fileNameOnly = $cleanFileName
+                                    } else {
+                                        Write-ErrorLog "Step 2 failed: Rename appeared successful but file not found at final destination"
+                                        # Use the temp destination as final if rename failed
+                                        $destinationPath = $tempDestinationPath
+                                        $fileNameOnly = $originalFileName
+                                    }
+                                } catch {
+                                    Write-ErrorLog "Step 2 rename failed: $($_.Exception.Message). Using original filename."
+                                    # Use the temp destination as final if rename failed
+                                    $destinationPath = $tempDestinationPath
+                                    $fileNameOnly = $originalFileName
+                                }
+                            } else {
+                                # No rename needed or move failed
+                                $destinationPath = $tempDestinationPath
+                                $fileNameOnly = $originalFileName
+                            }
+                            
+                            # Verify the final file exists
+                            if ($moveSuccessful -and (Test-Path -LiteralPath $destinationPath)) {
+                                $fileType = if ($isVideoDownload) { "Video" } else { "Audio" }
+                                $fileIcon = if ($isVideoDownload) { "🎥" } else { "🎵" }
+                                Write-Host ""
+                                Write-Host "✅ SUCCESS!" -ForegroundColor Green
+                                Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                                Write-Host "${fileIcon} ${fileType}: " -NoNewline -ForegroundColor Yellow
+                                Write-Host "$fileNameOnly" -ForegroundColor White
+                                Write-Host "📁 Location: " -NoNewline -ForegroundColor Yellow
+                                Write-Host "$destinationPath" -ForegroundColor Cyan
+                                Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                                Write-ErrorLog "Successfully moved $fileType '$downloadedFileInTemp' to '$destinationPath'."
+                            } else {
+                                $finalError = if ($moveError) { "Move failed: $moveError" } else { "File move appeared successful but destination file not found: $destinationPath" }
+                                throw $finalError
+                            }
+                            
+                            # Clean up any remaining files in temp with same prefix
+                            try {
+                                Write-ErrorLog "Starting cleanup of temporary files..."
+                                $cleanupFiles = Get-ChildItem -Path $tempDir -File | Where-Object { 
+                                    $_.Name.StartsWith($qualityPrefixForSearch) -and $_.Name.Contains($videoInfo.title.Substring(0, [Math]::Min(20, $videoInfo.title.Length)))
+                                }
+                                
+                                # Also clean up subtitle files
+                                $subtitleCleanupFiles = Get-ChildItem -Path $tempDir -Filter "*.srt" -File -ErrorAction SilentlyContinue | Where-Object {
+                                    $_.Name.StartsWith($qualityPrefixForSearch) -or $_.Name.Contains($videoInfo.title.Substring(0, [Math]::Min(20, $videoInfo.title.Length)))
+                                }
+                                
+                                # Combine both arrays
+                                $allCleanupFiles = @($cleanupFiles) + @($subtitleCleanupFiles) | Sort-Object FullName | Get-Unique
+                                
+                                Write-ErrorLog "Found $($allCleanupFiles.Count) files to clean up"
+                                foreach ($cleanupFile in $allCleanupFiles) {
+                                    try {
+                                        Remove-Item -LiteralPath $cleanupFile.FullName -Force -ErrorAction Stop
+                                        Write-ErrorLog "Cleaned up temp file: $($cleanupFile.Name)"
+                                    } catch {
+                                        Write-ErrorLog "Failed to clean up file: $($cleanupFile.Name) - $($_.Exception.Message)"
+                                    }
+                                }
+                            } catch {
+                                Write-ErrorLog "Error during temp cleanup: $($_.Exception.Message)"
+                            }
                             
                             # Auto-open the folder containing the downloaded file
                             try {
                                 Write-Host "🔍 Opening folder..." -ForegroundColor Green
-                                Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$destinationPath`"" -ErrorAction Stop
-                                Write-ErrorLog "Successfully opened folder for: $destinationPath"
+                                if (Test-Path -LiteralPath $destinationPath) {
+                                    Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$destinationPath`"" -ErrorAction Stop
+                                    Write-ErrorLog "Successfully opened folder for: $destinationPath"
+                                } else {
+                                    # Fallback: Open the directory instead
+                                    Start-Process -FilePath "explorer.exe" -ArgumentList "`"$destinationDir`"" -ErrorAction Stop
+                                    Write-ErrorLog "File not found, opened directory instead: $destinationDir"
+                                }
                             } catch {
                                 Write-ErrorLog "Failed to open folder: $($_.Exception.Message)"
                                 Write-Host "❌ Could not open folder automatically" -ForegroundColor Yellow
+                                Write-Host "📁 File location: $destinationPath" -ForegroundColor Cyan
                             }
                             
                             # Handle subtitles for video downloads
                             if ($isVideoDownload) {
-                                $baseVideoNameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($fileNameOnly)
-                                $subtitleFiles = Get-ChildItem -Path $tempDir -Filter "$($baseVideoNameWithoutExt)*.srt" -File -ErrorAction SilentlyContinue
-                                if ($subtitleFiles) {
-                                    foreach ($subFile in $subtitleFiles) {
-                                        $subDestinationPath = Join-Path $videoOutputDir $subFile.Name
-                                        try {
-                                            Move-Item -Path $subFile.FullName -Destination $subDestinationPath -Force -ErrorAction Stop
-                                            Write-Host "Subtitle file '$($subFile.Name)' moved to '$videoOutputDir'" -ForegroundColor Cyan
-                                            Write-ErrorLog "Successfully moved subtitle '$($subFile.Name)' to '$subDestinationPath'."
-                                        } catch {
-                                            $logMsgSub = "Move-Item (Subtitle) failed. Source: '$($subFile.FullName)', Dest: '$subDestinationPath'. Exception: $($_.Exception.ToString())"
-                                            Write-ErrorLog $logMsgSub
-                                            Write-Warning "Failed to move subtitle file '$($subFile.Name)'. It may still be in '$tempDir'."
+                                try {
+                                    Write-ErrorLog "Processing subtitle files..."
+                                    
+                                    # Look for subtitle files with various patterns
+                                    $baseVideoNameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($originalFileName)
+                                    $subtitleFiles = @()
+                                    
+                                    # Pattern 1: Exact match with original filename base
+                                    $pattern1 = "$($baseVideoNameWithoutExt)*.srt"
+                                    $subs1 = Get-ChildItem -Path $tempDir -Filter $pattern1 -File -ErrorAction SilentlyContinue
+                                    if ($subs1) { $subtitleFiles += $subs1 }
+                                    
+                                    # Pattern 2: Match with quality prefix
+                                    $pattern2 = "$($qualityPrefixForSearch)*.srt"
+                                    $subs2 = Get-ChildItem -Path $tempDir -Filter $pattern2 -File -ErrorAction SilentlyContinue
+                                    if ($subs2) { $subtitleFiles += $subs2 }
+                                    
+                                    # Remove duplicates
+                                    $subtitleFiles = $subtitleFiles | Sort-Object FullName | Get-Unique
+                                    
+                                    Write-ErrorLog "Found $($subtitleFiles.Count) subtitle files"
+                                    
+                                    if ($subtitleFiles) {
+                                        foreach ($subFile in $subtitleFiles) {
+                                            Write-ErrorLog "Processing subtitle: $($subFile.Name)"
+                                            
+                                            # Clean the subtitle filename too
+                                            $originalSubName = $subFile.Name
+                                            $cleanSubName = $originalSubName
+                                            
+                                            # If we successfully renamed the video, rename subtitle to match
+                                            if ($originalFileName -ne $fileNameOnly) {
+                                                $videoBaseClean = [System.IO.Path]::GetFileNameWithoutExtension($fileNameOnly)
+                                                $subExtension = [System.IO.Path]::GetExtension($originalSubName)
+                                                $subLanguagePart = ""
+                                                
+                                                # Extract language part (e.g., ".en" from ".en.srt")
+                                                if ($originalSubName -match '\.([a-z]{2,3})\.srt$') {
+                                                    $subLanguagePart = ".$($matches[1])"
+                                                }
+                                                
+                                                $cleanSubName = "$videoBaseClean$subLanguagePart$subExtension"
+                                            }
+                                            
+                                            $subTempDestination = Join-Path $videoOutputDir $originalSubName
+                                            $subFinalDestination = Join-Path $videoOutputDir $cleanSubName
+                                            
+                                            try {
+                                                # Move subtitle with original name first
+                                                Move-Item -LiteralPath $subFile.FullName -Destination $subTempDestination -Force -ErrorAction Stop
+                                                Start-Sleep -Milliseconds 500
+                                                
+                                                # Rename if needed
+                                                if ($originalSubName -ne $cleanSubName -and (Test-Path -LiteralPath $subTempDestination)) {
+                                                    try {
+                                                        Rename-Item -LiteralPath $subTempDestination -NewName $cleanSubName -Force -ErrorAction Stop
+                                                        Write-Host "📄 Subtitle: $cleanSubName" -ForegroundColor Cyan
+                                                        Write-ErrorLog "Successfully moved and renamed subtitle '$originalSubName' to '$cleanSubName'"
+                                                    } catch {
+                                                        Write-Host "📄 Subtitle: $originalSubName" -ForegroundColor Cyan
+                                                        Write-ErrorLog "Subtitle moved but rename failed: $($_.Exception.Message)"
+                                                    }
+                                                } else {
+                                                    Write-Host "📄 Subtitle: $originalSubName" -ForegroundColor Cyan
+                                                    Write-ErrorLog "Successfully moved subtitle '$originalSubName'"
+                                                }
+                                            } catch {
+                                                $logMsgSub = "Move-Item (Subtitle) failed. Source: '$($subFile.FullName)', Dest: '$subTempDestination'. Exception: $($_.Exception.Message)"
+                                                Write-ErrorLog $logMsgSub
+                                                Write-Host "⚠️ Failed to move subtitle file '$($subFile.Name)'" -ForegroundColor Yellow
+                                            }
                                         }
+                                    } else {
+                                        Write-ErrorLog "No subtitle files found"
                                     }
+                                } catch {
+                                    Write-ErrorLog "Error during subtitle processing: $($_.Exception.Message)"
                                 }
                             }
                         } catch {
@@ -2905,12 +3222,12 @@ Clear-Host
 
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║                                                                                ║" -ForegroundColor Cyan
-Write-Host "║                              Thank you for using                               ║" -ForegroundColor Yellow
-Write-Host "║                       YouTube Downloader Pro by MBNPRO                         ║" -ForegroundColor White
-Write-Host "║                                                                                ║" -ForegroundColor Cyan
-Write-Host "║                               See you next time!                               ║" -ForegroundColor Green
-Write-Host "║                                                                                ║" -ForegroundColor Cyan
+Write-Host "║                                                                               ║" -ForegroundColor Cyan
+Write-Host "║                              Thank you for using                              ║" -ForegroundColor Yellow
+Write-Host "║                       YouTube Downloader Pro by MBNPRO                        ║" -ForegroundColor White
+Write-Host "║                                                                               ║" -ForegroundColor Cyan
+Write-Host "║                               See you next time!                              ║" -ForegroundColor Green
+Write-Host "║                                                                               ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
