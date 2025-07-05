@@ -205,16 +205,16 @@ Set-ExecutionPolicy Restricted -Scope CurrentUser
 
 ### **Step 1: Launch the Application**
 
-**Method A: Using syd.bat (Recommended)**
+**Method A: Desktop Shortcut (After first run) (Recommended)**
+- Use the desktop shortcut created automatically
+- Double-click "SYD - YouTube Downloader" on your desktop
+
+**Method B: Using syd.bat**
 ```powershell
 # Double-click syd.bat or run from command line
 .\syd.bat
 # It will launch directly - no menu needed!
 ```
-
-**Method B: Desktop Shortcut (After first run)**
-- Use the desktop shortcut created automatically
-- Double-click "SYD - YouTube Downloader" on your desktop
 
 **Method C: Direct PowerShell**
 ```powershell
