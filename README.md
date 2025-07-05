@@ -77,7 +77,6 @@
 ```powershell
 # Download the batch file launcher
 Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.bat" -OutFile "syd.bat"
-# Run it (double-click or command line)
 .\syd.bat
 ```
 
