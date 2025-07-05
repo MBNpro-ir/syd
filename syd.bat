@@ -35,10 +35,6 @@ if not exist %LOCAL_SCRIPT_NAME% (
     exit /b 1
 )
 
-echo.
-echo Launching SYD...
-echo.
-
 REM Launch the PowerShell script
 powershell -NoProfile -ExecutionPolicy Bypass -File %LOCAL_SCRIPT_NAME%
 

@@ -842,32 +842,64 @@ function Get-LatestFfmpegVersion {
     }
 }
 
-function Update-YtDlp {
-    param ([string]$YtDlpPath)
+function Invoke-StartupTask {
+    param(
+        [string]$Message,
+        [scriptblock]$Action
+    )
     
-    Write-Host "Checking yt-dlp version..." -ForegroundColor Yellow
+    # Store cursor position
+    $cursorPos = $Host.UI.RawUI.CursorPosition
+    
+    # Write initial task status
+    Write-Host -NoNewline "  [ ] $Message"
+    
+    # Execute the action and capture success/failure
+    $success = & $Action
+    
+    # Move cursor back to the start of the line
+    $Host.UI.RawUI.CursorPosition = $cursorPos
+    
+    # Write final status
+    if ($success) {
+        Write-Host -NoNewline "  [✓] $Message" -ForegroundColor Green
+    } else {
+        Write-Host -NoNewline "  [✗] $Message" -ForegroundColor Red
+    }
+    
+    # Move cursor to the next line for the next task
+    Write-Host ""
+}
+
+function Update-YtDlp {
+    param ([string]$YtDlpPath, [switch]$Quiet)
+    
+    if (-not $Quiet) { Write-Host "Checking yt-dlp version..." -ForegroundColor Yellow }
     $localVersion = Get-LocalVersion -ExecutablePath $YtDlpPath
     $latestVersion = Get-LatestYtDlpVersion
     
+    $needsUpdate = $false
     if ($null -eq $localVersion) {
-        Write-Host "yt-dlp not found. Installing..." -ForegroundColor Yellow
+        if (-not $Quiet) { Write-Host "yt-dlp not found. Installing..." -ForegroundColor Yellow }
         $needsUpdate = $true
     } elseif ($null -eq $latestVersion) {
-        Write-Host "Could not check latest yt-dlp version. Using existing version." -ForegroundColor Yellow
-        return
+        if (-not $Quiet) { Write-Host "Could not check latest yt-dlp version. Using existing version." -ForegroundColor Yellow }
+        return $true # Not a failure
     } elseif ($localVersion -eq "unknown") {
-        Write-Host "Could not determine local yt-dlp version. Re-downloading..." -ForegroundColor Yellow
+        if (-not $Quiet) { Write-Host "Could not determine local yt-dlp version. Re-downloading..." -ForegroundColor Yellow }
         $needsUpdate = $true
     } else {
-        Write-Host "Local yt-dlp version: $localVersion" -ForegroundColor Cyan
-        Write-Host "Latest yt-dlp version: $latestVersion" -ForegroundColor Cyan
+        if (-not $Quiet) {
+            Write-Host "Local yt-dlp version: $localVersion" -ForegroundColor Cyan
+            Write-Host "Latest yt-dlp version: $latestVersion" -ForegroundColor Cyan
+        }
         
         if ($localVersion -ne $latestVersion) {
-            Write-Host "New version available! Updating..." -ForegroundColor Green
+            if (-not $Quiet) { Write-Host "New version available! Updating..." -ForegroundColor Green }
             $needsUpdate = $true
         } else {
-            Write-Host "yt-dlp is up to date." -ForegroundColor Green
-            return
+            if (-not $Quiet) { Write-Host "yt-dlp is up to date." -ForegroundColor Green }
+            return $true
         }
     }
     
@@ -877,24 +909,25 @@ function Update-YtDlp {
             $backupPath = "$YtDlpPath.old"
             try {
                 Move-Item -Path $YtDlpPath -Destination $backupPath -Force -ErrorAction Stop
-                Write-Host "Backed up old version to $backupPath" -ForegroundColor Gray
+                if (-not $Quiet) { Write-Host "Backed up old version to $backupPath" -ForegroundColor Gray }
             } catch {
-                Write-Warning "Failed to backup old yt-dlp: $($_.Exception.Message)"
+                if (-not $Quiet) { Write-Warning "Failed to backup old yt-dlp: $($_.Exception.Message)" }
             }
         }
         
         # Download new version
         $ytDlpUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
         try {
-            Write-Host "Downloading yt-dlp from: $ytDlpUrl" -Verbose
+            if (-not $Quiet) { Write-Host "Downloading yt-dlp from: $ytDlpUrl" -Verbose }
             Invoke-WebRequest -Uri $ytDlpUrl -OutFile $YtDlpPath -ErrorAction Stop
-            Write-Host "yt-dlp updated successfully to version $latestVersion" -ForegroundColor Green
+            if (-not $Quiet) { Write-Host "yt-dlp updated successfully to version $latestVersion" -ForegroundColor Green }
             Write-ErrorLog "yt-dlp updated to version $latestVersion"
             
             # Remove backup if successful
             if (Test-Path "$YtDlpPath.old") {
                 Remove-Item -Path "$YtDlpPath.old" -Force -ErrorAction SilentlyContinue
             }
+            return $true
         } catch {
             # Restore backup if download failed
             if (Test-Path "$YtDlpPath.old") {
@@ -903,36 +936,41 @@ function Update-YtDlp {
             Resolve-ScriptError -UserMessage "Failed to download yt-dlp. Check your internet connection." `
                                -InternalLogMessage "Invoke-WebRequest failed for yt-dlp. URL: $ytDlpUrl. Exception: $($_.Exception.Message)" `
                                -IsCritical $true
+            return $false
         }
     }
+    return $true
 }
 
 function Update-Ffmpeg {
-    param ([string]$FfmpegPath)
+    param ([string]$FfmpegPath, [switch]$Quiet)
     
-    Write-Host "Checking ffmpeg version..." -ForegroundColor Yellow
+    if (-not $Quiet) { Write-Host "Checking ffmpeg version..." -ForegroundColor Yellow }
     $localVersion = Get-LocalVersion -ExecutablePath $FfmpegPath -VersionArg "-version"
     $latestVersion = Get-LatestFfmpegVersion
     
+    $needsUpdate = $false
     if ($null -eq $localVersion) {
-        Write-Host "ffmpeg not found. Installing..." -ForegroundColor Yellow
+        if (-not $Quiet) { Write-Host "ffmpeg not found. Installing..." -ForegroundColor Yellow }
         $needsUpdate = $true
     } elseif ($null -eq $latestVersion) {
-        Write-Host "Could not check latest ffmpeg version. Using existing version." -ForegroundColor Yellow
-        return
+        if (-not $Quiet) { Write-Host "Could not check latest ffmpeg version. Using existing version." -ForegroundColor Yellow }
+        return $true # Not a failure
     } else {
-        Write-Host "Local ffmpeg version info: $localVersion" -ForegroundColor Cyan
-        Write-Host "Latest ffmpeg build: $latestVersion" -ForegroundColor Cyan
+        if (-not $Quiet) {
+            Write-Host "Local ffmpeg version info: $localVersion" -ForegroundColor Cyan
+            Write-Host "Latest ffmpeg build: $latestVersion" -ForegroundColor Cyan
+        }
         
         # For ffmpeg, we'll check if local file is older than 30 days
         if (Test-Path $FfmpegPath) {
             $fileAge = (Get-Date) - (Get-Item $FfmpegPath).LastWriteTime
             if ($fileAge.Days -gt 30) {
-                Write-Host "ffmpeg is more than 30 days old. Updating..." -ForegroundColor Yellow
+                if (-not $Quiet) { Write-Host "ffmpeg is more than 30 days old. Updating..." -ForegroundColor Yellow }
                 $needsUpdate = $true
             } else {
-                Write-Host "ffmpeg is relatively recent (less than 30 days old)." -ForegroundColor Green
-                return
+                if (-not $Quiet) { Write-Host "ffmpeg is relatively recent (less than 30 days old)." -ForegroundColor Green }
+                return $true
             }
         }
     }
@@ -943,9 +981,9 @@ function Update-Ffmpeg {
             $backupPath = "$FfmpegPath.old"
             try {
                 Move-Item -Path $FfmpegPath -Destination $backupPath -Force -ErrorAction Stop
-                Write-Host "Backed up old version to $backupPath" -ForegroundColor Gray
+                if (-not $Quiet) { Write-Host "Backed up old version to $backupPath" -ForegroundColor Gray }
             } catch {
-                Write-Warning "Failed to backup old ffmpeg: $($_.Exception.Message)"
+                if (-not $Quiet) { Write-Warning "Failed to backup old ffmpeg: $($_.Exception.Message)" }
             }
         }
         
@@ -957,15 +995,18 @@ function Update-Ffmpeg {
         if (Test-Path $tempExtractPath) { Remove-Item -Path $tempExtractPath -Recurse -Force -ErrorAction SilentlyContinue }
         
         try {
-            Write-Host "Downloading ffmpeg.zip from: $ffmpegZipUrl" -Verbose
+            if (-not $Quiet) {
+                Write-Host "Downloading ffmpeg.zip from: $ffmpegZipUrl" -Verbose
+                Write-Host "This might take a moment..." -ForegroundColor Yellow
+            }
             Invoke-WebRequest -Uri $ffmpegZipUrl -OutFile $tempZipPath -ErrorAction Stop
-            Write-Host "ffmpeg.zip downloaded. Extracting..." -ForegroundColor Yellow
+            if (-not $Quiet) { Write-Host "ffmpeg.zip downloaded. Extracting..." -ForegroundColor Yellow }
             Expand-Archive -Path $tempZipPath -DestinationPath $tempExtractPath -Force -ErrorAction Stop
             
             $ffmpegExeFile = Get-ChildItem -Path $tempExtractPath -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
             if ($ffmpegExeFile) {
                 Copy-Item -Path $ffmpegExeFile.FullName -Destination $FfmpegPath -Force -ErrorAction Stop
-                Write-Host "ffmpeg updated successfully!" -ForegroundColor Green
+                if (-not $Quiet) { Write-Host "ffmpeg updated successfully!" -ForegroundColor Green }
                 Write-ErrorLog "ffmpeg updated to latest version"
                 
                 # Remove backup if successful
@@ -975,6 +1016,7 @@ function Update-Ffmpeg {
             } else {
                 throw "ffmpeg.exe not found within the downloaded files."
             }
+            return $true
         } catch {
             # Restore backup if download failed
             if (Test-Path "$FfmpegPath.old") {
@@ -983,11 +1025,13 @@ function Update-Ffmpeg {
             Resolve-ScriptError -UserMessage "Failed during ffmpeg download or setup." `
                                -InternalLogMessage "Error during ffmpeg setup. URL: $ffmpegZipUrl. Exception: $($_.Exception.Message)" `
                                -IsCritical $true
+            return $false
         } finally {
             if (Test-Path $tempZipPath) { Remove-Item -Path $tempZipPath -Force -ErrorAction SilentlyContinue }
             if (Test-Path $tempExtractPath) { Remove-Item -Path $tempExtractPath -Recurse -Force -ErrorAction SilentlyContinue }
         }
     }
+    return $true
 }
 
 function Invoke-YouTubeLogin {
@@ -2443,6 +2487,29 @@ function Show-VideoDetails {
     Write-Host "" 
 }
 
+function Show-StartupAnimation {
+    param(
+        [string]$Message = "Loading...",
+        [int]$DurationSeconds = 2
+    )
+    
+    $animationChars = @("🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘")
+    $startTime = Get-Date
+    $cursorPos = $Host.UI.RawUI.CursorPosition
+    
+    while ((Get-Date) -lt $startTime.AddSeconds($DurationSeconds)) {
+        foreach ($char in $animationChars) {
+            $Host.UI.RawUI.CursorPosition = $cursorPos
+            Write-Host -NoNewline "$char $Message" -ForegroundColor Yellow
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    
+    # Clear the animation line
+    $Host.UI.RawUI.CursorPosition = $cursorPos
+    Write-Host (" " * ($Message.Length + 5))
+    $Host.UI.RawUI.CursorPosition = $cursorPos
+}
 
 if ($Help) {
     Show-ScriptHelp
@@ -2457,34 +2524,50 @@ try {
     Write-Host "Using default settings due to configuration error." -ForegroundColor Yellow
 }
 
-# Set up proxy configuration
-Write-ErrorLog "=== INITIALIZING COMPONENTS ==="
-Write-ErrorLog "Setting up proxy configuration"
-Set-ProxyConfiguration
+# --- Startup Sequence ---
+Clear-Host
+Show-StartupAnimation -Message "Initializing SYD Engine..." -DurationSeconds 1
 
-# Initialize database
-Write-ErrorLog "Initializing database"
-Initialize-Database
+Write-Host "🚀 Preparing launch sequence..." -ForegroundColor Cyan
+Write-Host "────────────────────────────────" -ForegroundColor Gray
+
+Invoke-StartupTask -Message "Configuring system proxy" -Action {
+    Set-ProxyConfiguration
+    return $true # Assume success
+}
+
+Invoke-StartupTask -Message "Initializing video cache database" -Action {
+    Initialize-Database
+    return $true # Assume success
+}
 
 $ytDlpPath = Join-Path $scriptDir "yt-dlp.exe"
 $ffmpegPath = Join-Path $scriptDir "ffmpeg.exe"
 Write-ErrorLog "yt-dlp path: $ytDlpPath"
 Write-ErrorLog "ffmpeg path: $ffmpegPath"
 
-# Check and update yt-dlp
-Write-ErrorLog "Checking and updating yt-dlp"
-Update-YtDlp -YtDlpPath $ytDlpPath
-
-# Check and update ffmpeg
-Write-ErrorLog "Checking and updating ffmpeg"
-Update-Ffmpeg -FfmpegPath $ffmpegPath
-
-if ($env:PATH -notlike "*;$($scriptDir);*") {
-    $env:PATH = "$($scriptDir);$($env:PATH)"
-    Write-ErrorLog "Added script directory to session PATH: $scriptDir"
-} else {
-    Write-ErrorLog "Script directory already in PATH: $scriptDir"
+Invoke-StartupTask -Message "Checking for yt-dlp updates" -Action {
+    Update-YtDlp -YtDlpPath $ytDlpPath -Quiet
 }
+
+Invoke-StartupTask -Message "Checking for ffmpeg updates" -Action {
+    Update-Ffmpeg -FfmpegPath $ffmpegPath -Quiet
+}
+
+Invoke-StartupTask -Message "Configuring environment" -Action {
+    if ($env:PATH -notlike "*;$($scriptDir);*") {
+        $env:PATH = "$($scriptDir);$($env:PATH)"
+        Write-ErrorLog "Added script directory to session PATH: $scriptDir"
+    } else {
+        Write-ErrorLog "Script directory already in PATH: $scriptDir"
+    }
+    return $true
+}
+
+Write-Host ""
+Write-Host "✅ System check complete. Launching..." -ForegroundColor Green
+Start-Sleep -Seconds 1
+# --- End of Startup Sequence ---
 
 $Host.UI.RawUI.BackgroundColor = "Black"
 $Host.UI.RawUI.ForegroundColor = "White"
