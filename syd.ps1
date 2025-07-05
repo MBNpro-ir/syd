@@ -266,10 +266,10 @@ function Get-ValidatedUserInput {
                 if ($userInput -match "^https?://.*youtube\.com/watch\?.*v=.*" -or 
                     $userInput -match "^https?://youtu\.be/.*" -or
                     $userInput -match "^https?://.*youtube\.com/.*" -or
-                    $userInput -in @("help", "-h", "exit", "clear-cache")) {
+                    $userInput -in @("help", "-h", "exit", "clear-cache", "folder", "settings")) {
                     return $userInput
                 }
-                Write-Host "Please enter a valid YouTube URL or command (help, exit, clear-cache)" -ForegroundColor Red
+                Write-Host "Please enter a valid YouTube URL or command (help, exit, clear-cache, folder, settings)" -ForegroundColor Red
             }
             
             "choice" {
@@ -1228,6 +1228,47 @@ function Resolve-ScriptError {
     }
 }
 
+function Open-ProgramFolder {
+    try {
+        Write-Host ""
+        Write-Host "🔍 Opening program folder..." -ForegroundColor Green
+        Start-Process -FilePath "explorer.exe" -ArgumentList $scriptDir -ErrorAction Stop
+        Write-ErrorLog "Successfully opened program folder: $scriptDir"
+        Write-Host "✅ Program folder opened successfully!" -ForegroundColor Green
+        Write-Host "📁 Location: $scriptDir" -ForegroundColor Cyan
+    } catch {
+        Write-ErrorLog "Failed to open program folder: $($_.Exception.Message)"
+        Write-Host "❌ Could not open program folder automatically" -ForegroundColor Red
+        Write-Host "📁 Program folder location: $scriptDir" -ForegroundColor Yellow
+    }
+}
+
+function Open-SettingsFile {
+    try {
+        Write-Host ""
+        Write-Host "⚙️ Opening settings file..." -ForegroundColor Green
+        if (Test-Path $settingsPath) {
+            Start-Process -FilePath "notepad.exe" -ArgumentList $settingsPath -ErrorAction Stop
+            Write-ErrorLog "Successfully opened settings file: $settingsPath"
+            Write-Host "✅ Settings file opened successfully!" -ForegroundColor Green
+            Write-Host "📄 Location: $settingsPath" -ForegroundColor Cyan
+        } else {
+            Write-Host "⚠️ Settings file not found. Creating new settings file..." -ForegroundColor Yellow
+            if (Create-SettingsFile -Path $settingsPath) {
+                Start-Process -FilePath "notepad.exe" -ArgumentList $settingsPath -ErrorAction Stop
+                Write-Host "✅ New settings file created and opened!" -ForegroundColor Green
+                Write-Host "📄 Location: $settingsPath" -ForegroundColor Cyan
+            } else {
+                Write-Host "❌ Failed to create settings file" -ForegroundColor Red
+            }
+        }
+    } catch {
+        Write-ErrorLog "Failed to open settings file: $($_.Exception.Message)"
+        Write-Host "❌ Could not open settings file automatically" -ForegroundColor Red
+        Write-Host "📄 Settings file location: $settingsPath" -ForegroundColor Yellow
+    }
+}
+
 function Show-ScriptHelp {
     Write-Host ""
     Write-Host "╔═══════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -1261,6 +1302,8 @@ function Show-ScriptHelp {
     Write-Host "  📖 help, -h       : " -NoNewline; Write-Host "Show this comprehensive help guide" -ForegroundColor Gray
     Write-Host "  🚪 exit           : " -NoNewline; Write-Host "Exit the program gracefully" -ForegroundColor Gray
     Write-Host "  🗑️ clear-cache    : " -NoNewline; Write-Host "Clear cached video information" -ForegroundColor Gray
+    Write-Host "  📁 folder         : " -NoNewline; Write-Host "Open program folder in explorer" -ForegroundColor Gray
+    Write-Host "  ⚙️ settings       : " -NoNewline; Write-Host "Open settings.json file for editing" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Command line options:" -ForegroundColor White
     Write-Host "  .\syd_latest.ps1 -Help    : " -NoNewline; Write-Host "Show help and exit" -ForegroundColor Gray
@@ -1313,6 +1356,7 @@ function Show-ScriptHelp {
     Write-Host "⚙️  5. CONFIGURATION GUIDE" -ForegroundColor Green
     Write-Host "──────────────────────────" -ForegroundColor Gray
     Write-Host "  All settings are stored in: " -NoNewline; Write-Host "settings.json" -ForegroundColor Yellow
+    Write-Host "  💡 Quick access: Use " -NoNewline; Write-Host "'settings'" -NoNewline -ForegroundColor Cyan; Write-Host " command to open the file" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  📁 File Locations:" -ForegroundColor Cyan
     Write-Host "     • Downloads  : Downloaded\Video, Downloaded\Audio, Downloaded\Covers" -ForegroundColor White
@@ -1320,22 +1364,25 @@ function Show-ScriptHelp {
     Write-Host "     • Cache      : video_cache.json" -ForegroundColor White
     Write-Host "     • Cookies    : cookies.txt" -ForegroundColor White
     Write-Host "     • Debug log  : debug.txt" -ForegroundColor White
+    Write-Host "     💡 Quick access: Use " -NoNewline; Write-Host "'folder'" -NoNewline -ForegroundColor Cyan; Write-Host " command to open program folder" -ForegroundColor Gray
     Write-Host ""
     
     Write-Host "🔧 6. TROUBLESHOOTING" -ForegroundColor Green
     Write-Host "─────────────────────" -ForegroundColor Gray
     Write-Host "  ❌ Download fails?" -ForegroundColor Red
     Write-Host "     • Check your internet connection" -ForegroundColor White
-    Write-Host "     • Try using cookies (see settings.json)" -ForegroundColor White
+    Write-Host "     • Try using cookies (configure with " -NoNewline -ForegroundColor White; Write-Host "'settings'" -NoNewline -ForegroundColor Cyan; Write-Host " command)" -ForegroundColor White
     Write-Host "     • Enable proxy if behind firewall" -ForegroundColor White
-    Write-Host "     • Clear cache with 'clear-cache' command" -ForegroundColor White
+    Write-Host "     • Clear cache with " -NoNewline -ForegroundColor White; Write-Host "'clear-cache'" -NoNewline -ForegroundColor Cyan; Write-Host " command" -ForegroundColor White
     Write-Host ""
     Write-Host "  🔒 Age-restricted or private video?" -ForegroundColor Red
     Write-Host "     • Configure cookies.txt from your browser" -ForegroundColor White
     Write-Host "     • Use YouTube login option when prompted" -ForegroundColor White
+    Write-Host "     • Edit settings with " -NoNewline -ForegroundColor White; Write-Host "'settings'" -NoNewline -ForegroundColor Cyan; Write-Host " command" -ForegroundColor White
     Write-Host ""
     Write-Host "  🐛 Other issues?" -ForegroundColor Red
     Write-Host "     • Check debug.txt for detailed error logs" -ForegroundColor White
+    Write-Host "     • Use " -NoNewline -ForegroundColor White; Write-Host "'folder'" -NoNewline -ForegroundColor Cyan; Write-Host " command to access program files" -ForegroundColor White
     Write-Host "     • Update yt-dlp and ffmpeg (automatic on start)" -ForegroundColor White
     Write-Host ""
     
@@ -2238,6 +2285,8 @@ Write-Host ""
 Write-Host "  📖 " -NoNewline; Write-Host "help, -h     " -NoNewline -ForegroundColor Cyan; Write-Host ": Show detailed help and guide" -ForegroundColor Gray
 Write-Host "  🚪 " -NoNewline; Write-Host "exit         " -NoNewline -ForegroundColor Cyan; Write-Host ": Exit the program" -ForegroundColor Gray
 Write-Host "  🗑️ " -NoNewline; Write-Host "clear-cache  " -NoNewline -ForegroundColor Cyan; Write-Host ": Clear video information cache" -ForegroundColor Gray
+Write-Host "  📁 " -NoNewline; Write-Host "folder       " -NoNewline -ForegroundColor Cyan; Write-Host ": Open program folder" -ForegroundColor Gray
+Write-Host "  ⚙️ " -NoNewline; Write-Host "settings     " -NoNewline -ForegroundColor Cyan; Write-Host ": Open settings file" -ForegroundColor Gray
 Write-Host ""
 
 # Status bar
@@ -2263,7 +2312,7 @@ $continueWithNewLink = 'y'
 
 do { 
     Write-Host "╭──────────────────────────────╮" -ForegroundColor Cyan
-    Write-Host "│     🎯 MAIN MENU 🎯      │" -ForegroundColor Cyan
+    Write-Host "│          MAIN MENU           │" -ForegroundColor Cyan
     Write-Host "╰──────────────────────────────╯" -ForegroundColor Cyan
     Write-Host ""
     $userInputUrl = Get-ValidatedUserInput -Prompt "📥 Enter YouTube URL (or command):" -InputType "url" -MaxAttempts 5
@@ -2286,6 +2335,16 @@ do {
     
     if ($userInputUrl -eq 'clear-cache') {
         Clear-VideoCache
+        continue
+    }
+    
+    if ($userInputUrl -eq 'folder') {
+        Open-ProgramFolder
+        continue
+    }
+    
+    if ($userInputUrl -eq 'settings') {
+        Open-SettingsFile
         continue
     }
     
