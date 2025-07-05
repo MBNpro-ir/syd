@@ -67,15 +67,8 @@
 
 ## 🛠️ Installation & Setup
 
-### **Option 1: Direct Download from Releases (Fastest & Recommended)**
-1. **Go to [Releases Page](https://github.com/MBNpro-ir/syd/releases/latest)**
-2. **Download `syd.bat`** directly from the latest release
-3. **Double-click `syd.bat`** or run from command line: `.\syd.bat`
-4. **Done!** The script will automatically download the latest version and run
-
-### **Option 2: Download via PowerShell**
+### **Option 1: Download via PowerShell (Fastest & Recommended)**
 ```powershell
-# Download the batch file launcher
 Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.bat" -OutFile "syd.bat"
 .\syd.bat
 ```
@@ -88,12 +81,21 @@ Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/downloa
 - 📁 **Auto-Organize**: Downloads files and automatically opens the folder
 - ⚡ **Lightning Fast**: Skip unnecessary downloads when files are up-to-date
 
+### **Option 2: Direct Download from Releases (Fastest & Recommended)**
+1. **Go to [Releases Page](https://github.com/MBNpro-ir/syd/releases/latest)**
+2. **Download `syd.bat`** directly from the latest release
+3. **Double-click `syd.bat`** or run from command line: `.\syd.bat`
+4. **Done!** The script will automatically download the latest version and run
+
 ### **Option 3: Direct PowerShell (Advanced Users)**
 ```powershell
 # Download and run the latest version
 Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.ps1" -OutFile "syd.ps1"
 .\syd.ps1
 ```
+⚠️ !!THIS OPTION IS GONNA MESS WITH YOUR USER FOLDER IN C:/USERS/(YOUR USERNAME FOLDER)
+
+⚠️ !!USE WITH CAUTION!!
 
 ### **Option 4: Git Clone (Developers)**
 ```bash
