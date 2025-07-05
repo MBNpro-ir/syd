@@ -67,29 +67,35 @@
 
 ## 🛠️ Installation & Setup
 
-### **Option 1: Super Easy Setup with GUI Menu (Recommended)**
+### **Option 1: Direct Download from Releases (Fastest & Recommended)**
+1. **Go to [Releases Page](https://github.com/MBNpro-ir/syd/releases/latest)**
+2. **Download `syd.bat`** directly from the latest release
+3. **Double-click `syd.bat`** or run from command line: `.\syd.bat`
+4. **Done!** The script will automatically download the latest version and run
+
+### **Option 2: Download via PowerShell**
 ```powershell
 # Download the batch file launcher
 Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.bat" -OutFile "syd.bat"
-# Double-click syd.bat or run it from command line
+# Run it (double-click or command line)
 .\syd.bat
 ```
 
 **Features of syd.bat:**
-- 🎯 **Interactive Menu**: Choose from 3 options with a beautiful interface
+- 🚀 **Direct Launch**: No menu needed - launches directly!
 - 🔄 **Auto-Update**: Always downloads the latest version automatically
-- 📖 **README Access**: Open documentation directly from the menu
+- 🖥️ **Desktop Shortcut**: Automatically creates a desktop shortcut for easy access
 - 🎨 **User-Friendly**: Colorful interface with error handling
-- 🔁 **Loop Back**: Return to menu after each operation
+- 📁 **Auto-Organize**: Downloads files and automatically opens the folder
 
-### **Option 2: Direct PowerShell (Advanced Users)**
+### **Option 3: Direct PowerShell (Advanced Users)**
 ```powershell
 # Download and run the latest version
 Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.ps1" -OutFile "syd.ps1"
 .\syd.ps1
 ```
 
-### **Option 3: Git Clone (Developers)**
+### **Option 4: Git Clone (Developers)**
 ```bash
 git clone https://github.com/MBNpro-ir/syd.git
 cd syd
@@ -102,33 +108,28 @@ cd syd
 - ✅ 100MB free disk space
 - ✅ Admin rights (for first-time setup)
 
-### **📋 Using syd.bat Menu System**
+### **📋 Using syd.bat - Direct Launch**
 
-When you run `syd.bat`, you'll see an interactive menu:
+When you run `syd.bat`, it will automatically:
 
-```
-========================================
-     Simple YouTube Downloader (SYD)
-            by MBNPRO
-========================================
+1. **Create SYD folder** if it doesn't exist
+2. **Download latest version** of syd.ps1 into the SYD folder
+3. **Launch the downloader** immediately
+4. **Create desktop shortcut** for easy future access
 
-Choose an option:
-
-1. Run SYD (Download latest version and launch)
-2. Exit
-
-Enter your choice (1-2):
-```
-
-**Menu Options Explained:**
-- **Option 1**: Downloads the latest `syd.ps1` and launches it immediately
-- **Option 2**: Exits the program
+**No menu needed** - it launches directly to the YouTube downloader!
 
 **Benefits:**
-- 🔄 Always uses the latest version (auto-download)
-- 🎨 Colorful, user-friendly interface
-- 🛡️ Input validation and error handling
-- 🔁 Returns to menu after each operation
+- 🚀 **Instant Launch**: No menu navigation needed
+- 🔄 **Always Latest**: Auto-downloads the newest version
+- 🖥️ **Desktop Shortcut**: Creates shortcut automatically with logo icon
+- 🎨 **User-Friendly**: Colorful interface with error handling
+- 📁 **Auto-Open Folder**: Opens download folder automatically after each download
+
+**🔁 Re-running the Program:**
+- You can run `.\syd.bat` again anytime from PowerShell or CMD
+- Or use the desktop shortcut created automatically
+- Each time it will check for updates and launch the latest version
 
 ### **🔒 Windows 11 PowerShell Execution Policy Setup**
 
@@ -197,13 +198,20 @@ Set-ExecutionPolicy Restricted -Scope CurrentUser
 ```powershell
 # Double-click syd.bat or run from command line
 .\syd.bat
-# Then choose option 1 from the menu
+# It will launch directly - no menu needed!
 ```
 
-**Method B: Direct PowerShell**
+**Method B: Desktop Shortcut (After first run)**
+- Use the desktop shortcut created automatically
+- Double-click "SYD - YouTube Downloader" on your desktop
+
+**Method C: Direct PowerShell**
 ```powershell
 .\syd.ps1
 ```
+
+**🔁 Running Again:**
+You can run `.\syd.bat` anytime from PowerShell or CMD to launch the program again.
 
 ### **Step 2: Enter YouTube URL**
 ```
@@ -226,6 +234,35 @@ Files are automatically organized in the `Downloaded` folder:
 - 📁 `Downloaded/Video/` - Video files
 - 📁 `Downloaded/Audio/` - Audio files  
 - 📁 `Downloaded/Covers/` - Thumbnails
+
+**🎉 Bonus Features:**
+- 📁 **Auto-Open Folder**: The download folder opens automatically after each download
+- 🖥️ **Desktop Shortcut**: A shortcut is created on your desktop for easy access
+- 🔄 **Always Updated**: Each run checks for and downloads the latest version
+
+---
+
+## 🚀 Different Ways to Run SYD
+
+### **🖥️ Desktop Shortcut (Easiest)**
+- After first run, use the desktop shortcut "SYD - YouTube Downloader"
+- Double-click to launch instantly
+- Features custom logo icon (if logo.png exists)
+
+### **💻 Command Line**
+```powershell
+# From PowerShell or CMD
+.\syd.bat
+```
+
+### **📂 File Explorer**
+- Double-click `syd.bat` in File Explorer
+- No command line needed
+
+### **🔁 Re-running**
+- You can run `.\syd.bat` multiple times
+- Each time it will check for updates and launch the latest version
+- Use any of the above methods whenever you want to download videos
 
 ---
 
@@ -371,6 +408,12 @@ We welcome suggestions for new features and improvements!
 ---
 
 ## 📈 What's New in Version 2.0
+
+### **🚀 Streamlined Experience**
+- **Direct Launch**: No menu navigation - launches directly to downloader
+- **Auto-Open Folders**: Downloaded files' folders open automatically
+- **Desktop Shortcut**: Automatic shortcut creation with custom logo
+- **Smart Organization**: Files organized in SYD folder structure
 
 ### **🧠 Enhanced Error Handling**
 - **15+ Error Types**: Specific solutions for each error category
