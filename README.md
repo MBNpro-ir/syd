@@ -67,14 +67,29 @@
 
 ## 🛠️ Installation & Setup
 
-### **Option 1: Easy Setup (Recommended)**
+### **Option 1: Super Easy Setup with GUI Menu (Recommended)**
+```powershell
+# Download the batch file launcher
+Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.bat" -OutFile "syd.bat"
+# Double-click syd.bat or run it from command line
+.\syd.bat
+```
+
+**Features of syd.bat:**
+- 🎯 **Interactive Menu**: Choose from 3 options with a beautiful interface
+- 🔄 **Auto-Update**: Always downloads the latest version automatically
+- 📖 **README Access**: Open documentation directly from the menu
+- 🎨 **User-Friendly**: Colorful interface with error handling
+- 🔁 **Loop Back**: Return to menu after each operation
+
+### **Option 2: Direct PowerShell (Advanced Users)**
 ```powershell
 # Download and run the latest version
 Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/download/syd.ps1" -OutFile "syd.ps1"
 .\syd.ps1
 ```
 
-### **Option 2: Git Clone**
+### **Option 3: Git Clone (Developers)**
 ```bash
 git clone https://github.com/MBNpro-ir/syd.git
 cd syd
@@ -87,11 +102,105 @@ cd syd
 - ✅ 100MB free disk space
 - ✅ Admin rights (for first-time setup)
 
+### **📋 Using syd.bat Menu System**
+
+When you run `syd.bat`, you'll see an interactive menu:
+
+```
+========================================
+     Simple YouTube Downloader (SYD)
+            by MBNPRO
+========================================
+
+Choose an option:
+
+1. Run SYD (Download latest version and launch)
+2. Exit
+
+Enter your choice (1-2):
+```
+
+**Menu Options Explained:**
+- **Option 1**: Downloads the latest `syd.ps1` and launches it immediately
+- **Option 2**: Exits the program
+
+**Benefits:**
+- 🔄 Always uses the latest version (auto-download)
+- 🎨 Colorful, user-friendly interface
+- 🛡️ Input validation and error handling
+- 🔁 Returns to menu after each operation
+
+### **🔒 Windows 11 PowerShell Execution Policy Setup**
+
+**⚠️ Important Notice for Windows 11 Users:**
+Windows 11 may block PowerShell script execution by default. If you encounter errors like:
+- `"Execution of scripts is disabled on this system"`
+- `"UnauthorizedAccess"`
+- `"ExecutionPolicy restriction"`
+
+**🛠️ Solution: Temporarily Allow Script Execution**
+
+**Step 1: Check Current Policy**
+```powershell
+# Run PowerShell as Administrator and check current policy
+Get-ExecutionPolicy
+```
+
+**Step 2: Temporarily Allow Script Execution**
+```powershell
+# Run PowerShell as Administrator
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+# Or for all users (requires admin):
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine
+```
+
+**Step 3: Run SYD**
+```powershell
+# Now you can run syd.bat without issues
+.\syd.bat
+```
+
+**Step 4: Restore Original Security Settings (Recommended)**
+```powershell
+# After using SYD, restore original policy for security
+Set-ExecutionPolicy -ExecutionPolicy Restricted -Scope CurrentUser
+# Or for all users:
+Set-ExecutionPolicy -ExecutionPolicy Restricted -Scope LocalMachine
+```
+
+**🔄 Quick Commands Summary:**
+```powershell
+# Allow execution
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Use SYD
+.\syd.bat
+
+# Restore security (when done)
+Set-ExecutionPolicy Restricted -Scope CurrentUser
+```
+
+**📝 Execution Policy Options Explained:**
+- **Restricted**: No scripts allowed (Windows 11 default)
+- **RemoteSigned**: Local scripts allowed, downloaded scripts need signature
+- **Unrestricted**: All scripts allowed (not recommended)
+
+**🎯 Pro Tip:** Use `CurrentUser` scope to avoid affecting other users on the system.
+
 ---
 
 ## 🎯 Quick Start Guide
 
 ### **Step 1: Launch the Application**
+
+**Method A: Using syd.bat (Recommended)**
+```powershell
+# Double-click syd.bat or run from command line
+.\syd.bat
+# Then choose option 1 from the menu
+```
+
+**Method B: Direct PowerShell**
 ```powershell
 .\syd.ps1
 ```
