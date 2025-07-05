@@ -673,42 +673,6 @@ We welcome suggestions for new features and improvements!
 
 ---
 
-## 📈 What's New in Version 2.0
-
-### **🚀 Streamlined Experience**
-- **Direct Launch**: No menu navigation - launches directly to downloader
-- **Auto-Open Folders**: Downloaded files' folders open automatically
-- **Desktop Shortcut**: Automatic shortcut creation with custom logo
-- **Smart Organization**: Files organized in SYD folder structure
-
-### **🧠 Intelligent Update System**
-- **Smart Version Checking**: ETag-based detection eliminates false updates
-- **Lightning Fast Launches**: Skip downloads when files are up-to-date
-- **Bandwidth Optimization**: Only downloads when GitHub has real updates
-- **Multi-Layer Validation**: ETag + file size + cache comparison
-
-### **🧠 Enhanced Error Handling**
-- **15+ Error Types**: Specific solutions for each error category
-- **Smart Recovery**: Automatic retry with different methods
-- **User Guidance**: Clear explanations and step-by-step solutions
-
-### **✅ Input Validation**
-- **URL Verification**: Automatic YouTube URL validation
-- **Choice Validation**: No more invalid menu selections
-- **Retry Logic**: Multiple attempts for user input
-
-### **⚡ Performance Improvements**
-- **Smart Caching**: 10x faster video info retrieval
-- **Optimized Downloads**: Better speed and reliability
-- **Memory Management**: Reduced resource usage
-
-### **🔒 Security Enhancements**
-- **Cookie Support**: Secure authentication handling
-- **Proxy Integration**: Corporate network compatibility
-- **Safe Downloads**: Sandboxed operations
-
----
-
 ## 📜 License & Credits
 
 ### **License**
