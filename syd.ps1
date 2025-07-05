@@ -18,6 +18,39 @@ $DebugLogPath = Join-Path $scriptDir "debug.txt"
 $originalBackground = $Host.UI.RawUI.BackgroundColor
 $originalForeground = $Host.UI.RawUI.ForegroundColor
 
+# --- Configure Terminal Size ---
+try {
+    $currentWindowSize = $Host.UI.RawUI.WindowSize
+    $currentBufferSize = $Host.UI.RawUI.BufferSize
+    
+    # Define desired dimensions
+    $desiredWidth = 120  # Reduced from 140 to be more compatible
+    $desiredHeight = 35  # Reduced from 45 to be more compatible
+    
+    # Get maximum window size for current screen
+    $maxWindowSize = $Host.UI.RawUI.MaxWindowSize
+    
+    # Adjust desired size to not exceed maximum
+    $finalWidth = [Math]::Min($desiredWidth, $maxWindowSize.Width)
+    $finalHeight = [Math]::Min($desiredHeight, $maxWindowSize.Height)
+    
+    # First, set buffer size to be larger than or equal to desired window size
+    $newBufferSize = $currentBufferSize
+    $newBufferSize.Width = [Math]::Max($finalWidth, $currentBufferSize.Width)
+    $newBufferSize.Height = [Math]::Max(1000, $currentBufferSize.Height) # Large buffer for scrolling
+    $Host.UI.RawUI.BufferSize = $newBufferSize
+    
+    # Then set window size
+    $newWindowSize = $currentWindowSize
+    $newWindowSize.Width = $finalWidth
+    $newWindowSize.Height = $finalHeight
+    $Host.UI.RawUI.WindowSize = $newWindowSize
+    
+    Write-Host "Terminal size configured: $($finalWidth)x$($finalHeight)" -ForegroundColor Green
+} catch {
+    Write-Warning "Could not set terminal size: $($_.Exception.Message)"
+}
+
 # --- Enhanced Error Handling Functions ---
 
 function Get-DetailedErrorMessage {
@@ -319,7 +352,7 @@ function Get-DefaultSettings {
             custom_proxy_password = ""
         }
         cookies = @{
-            use_cookies = $true
+            use_cookies = $false
             cookie_file_path = "cookies.txt"
             cookie_file_directory = ""
         }
@@ -336,7 +369,7 @@ function Get-DefaultSettings {
             covers_subdirectory = "Covers"
         }
         advanced = @{
-            enable_debug_logging = $true
+            enable_debug_logging = $false
             log_file_path = "debug.txt"
             cleanup_temp_files = $true
             max_description_lines = 5
@@ -1227,7 +1260,7 @@ function Show-ScriptHelp {
     Write-Host "  📹 YouTube URL    : " -NoNewline; Write-Host "Paste any YouTube video link" -ForegroundColor Gray
     Write-Host "  📖 help, -h       : " -NoNewline; Write-Host "Show this comprehensive help guide" -ForegroundColor Gray
     Write-Host "  🚪 exit           : " -NoNewline; Write-Host "Exit the program gracefully" -ForegroundColor Gray
-    Write-Host "  🗑️  clear-cache    : " -NoNewline; Write-Host "Clear cached video information" -ForegroundColor Gray
+    Write-Host "  🗑️ clear-cache    : " -NoNewline; Write-Host "Clear cached video information" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Command line options:" -ForegroundColor White
     Write-Host "  .\syd_latest.ps1 -Help    : " -NoNewline; Write-Host "Show help and exit" -ForegroundColor Gray
@@ -1343,7 +1376,6 @@ function Initialize-Directory {
     if (-not (Test-Path $Path)) {
         try {
             New-Item -Path $Path -ItemType Directory -Force -ErrorAction Stop | Out-Null
-            Write-Host "Created directory: $Path" -ForegroundColor Cyan
             Write-ErrorLog "Successfully created directory: $Path"
         } catch {
             Resolve-ScriptError -UserMessage "Failed to create a necessary directory: $Path. Please check permissions." `
@@ -2205,7 +2237,7 @@ Write-Host "════════════════════" -Foreg
 Write-Host ""
 Write-Host "  📖 " -NoNewline; Write-Host "help, -h     " -NoNewline -ForegroundColor Cyan; Write-Host ": Show detailed help and guide" -ForegroundColor Gray
 Write-Host "  🚪 " -NoNewline; Write-Host "exit         " -NoNewline -ForegroundColor Cyan; Write-Host ": Exit the program" -ForegroundColor Gray
-Write-Host "  🗑️  " -NoNewline; Write-Host "clear-cache  " -NoNewline -ForegroundColor Cyan; Write-Host ": Clear video information cache" -ForegroundColor Gray
+Write-Host "  🗑️ " -NoNewline; Write-Host "clear-cache  " -NoNewline -ForegroundColor Cyan; Write-Host ": Clear video information cache" -ForegroundColor Gray
 Write-Host ""
 
 # Status bar
