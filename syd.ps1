@@ -1682,6 +1682,16 @@ function Show-FormatsMenu {
         Description = "Download video thumbnail"
     }
     
+    Write-Host "  " -NoNewline
+    Write-Host "$([string]($optionNumber++)).".PadRight(4) -NoNewline -ForegroundColor Cyan
+    Write-Host "🔗 " -NoNewline
+    Write-Host "(Send New Link)" -ForegroundColor Gray
+    $menuOptions += @{
+        Number = $optionNumber - 1
+        Type = "new_link"
+        Description = "Send new YouTube link"
+    }
+    
     Write-Host ""
     Write-Host "═══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
     
@@ -2576,14 +2586,25 @@ do {
                     $isVideoDownload = $false
                 }
                 
+                "new_link" {
+                    Write-Host ""
+                    Write-Host "🔗 Preparing to enter new YouTube link..." -ForegroundColor Green
+                    Write-Host ""
+                    # Set flags to exit both loops and go back to main URL input
+                    $downloadAnotherFormatForSameUrl = 'n'
+                    $continueWithNewLink = 'y'
+                    # Skip to the end of the current format processing loop
+                    break
+                }
+                
                 default {
                     Write-Host "Unknown selection type: $($selectedOption.Type)" -ForegroundColor Red
                     continue
                 }
             }
             
-                            # Common download execution logic for video/audio (not cover)
-            if ($selectedOption.Type -ne "cover") {
+                            # Common download execution logic for video/audio (not cover and not new_link)
+            if ($selectedOption.Type -ne "cover" -and $selectedOption.Type -ne "new_link") {
                 if ($null -eq $ytDlpArgsForDownload) {
                     Resolve-ScriptError -UserMessage "Could not generate download arguments for the selected option." `
                                        -InternalLogMessage "Internal logic error: ytDlpArgsForDownload was null before calling Invoke-YtDlpWithProgress."
@@ -2718,12 +2739,15 @@ do {
 
 
 
-        Write-Host ""
-        Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-        Write-Host ""
-        $userResponseSameUrl = Get-ValidatedUserInput -Prompt "🔄 Download another format for THIS video? (y/n):" -InputType "yesno" -MaxAttempts 3
-        if ($userResponseSameUrl -eq 'n' -or $null -eq $userResponseSameUrl) {
-            $downloadAnotherFormatForSameUrl = 'n' 
+        # Only ask for another format if we didn't select "new_link"
+        if ($selectedOption.Type -ne "new_link") {
+            Write-Host ""
+            Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+            Write-Host ""
+            $userResponseSameUrl = Get-ValidatedUserInput -Prompt "🔄 Download another format for THIS video? (y/n):" -InputType "yesno" -MaxAttempts 3
+            if ($userResponseSameUrl -eq 'n' -or $null -eq $userResponseSameUrl) {
+                $downloadAnotherFormatForSameUrl = 'n' 
+            }
         }
 
     } while ($downloadAnotherFormatForSameUrl.ToLower() -eq 'y') 
