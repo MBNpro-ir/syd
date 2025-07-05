@@ -2480,6 +2480,16 @@ do {
                             Write-Host "`nCover successfully downloaded and moved to:" -ForegroundColor Green
                             Write-Host "$finalCoverPath" -ForegroundColor Cyan
                             Write-ErrorLog "Successfully downloaded and moved cover '$finalCoverFileName' to '$finalCoverPath'."
+                            
+                            # Auto-open the folder containing the downloaded cover
+                            try {
+                                Write-Host "🔍 Opening folder..." -ForegroundColor Green
+                                Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$finalCoverPath`"" -ErrorAction Stop
+                                Write-ErrorLog "Successfully opened folder for cover: $finalCoverPath"
+                            } catch {
+                                Write-ErrorLog "Failed to open folder for cover: $($_.Exception.Message)"
+                                Write-Host "❌ Could not open folder automatically" -ForegroundColor Yellow
+                            }
                         } catch {
                             $logMsg = "Failed to download/move cover. URL:'$thumbnailUrl'. Temp:'$tempCoverPath'. Final:'$finalCoverPath' Exc: $($_.Exception.Message)"
                             Write-Host "Cover download failed. Trying alternative method..." -ForegroundColor Yellow
@@ -2521,6 +2531,16 @@ do {
                                         Write-Host "`nCover successfully downloaded using yt-dlp:" -ForegroundColor Green
                                         Write-Host "$finalCoverPath" -ForegroundColor Cyan
                                         Write-ErrorLog "Successfully downloaded cover using yt-dlp: $finalCoverPath"
+                                        
+                                        # Auto-open the folder containing the downloaded cover
+                                        try {
+                                            Write-Host "🔍 Opening folder..." -ForegroundColor Green
+                                            Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$finalCoverPath`"" -ErrorAction Stop
+                                            Write-ErrorLog "Successfully opened folder for cover: $finalCoverPath"
+                                        } catch {
+                                            Write-ErrorLog "Failed to open folder for cover: $($_.Exception.Message)"
+                                            Write-Host "❌ Could not open folder automatically" -ForegroundColor Yellow
+                                        }
                                     } else {
                                         throw "yt-dlp completed but no thumbnail file found"
                                     }
@@ -2697,6 +2717,16 @@ do {
                             Write-Host "$destinationPath" -ForegroundColor Cyan
                             Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
                             Write-ErrorLog "Successfully moved $fileType '$downloadedFileInTemp' to '$destinationPath'."
+                            
+                            # Auto-open the folder containing the downloaded file
+                            try {
+                                Write-Host "🔍 Opening folder..." -ForegroundColor Green
+                                Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$destinationPath`"" -ErrorAction Stop
+                                Write-ErrorLog "Successfully opened folder for: $destinationPath"
+                            } catch {
+                                Write-ErrorLog "Failed to open folder: $($_.Exception.Message)"
+                                Write-Host "❌ Could not open folder automatically" -ForegroundColor Yellow
+                            }
                             
                             # Handle subtitles for video downloads
                             if ($isVideoDownload) {
