@@ -83,10 +83,11 @@ Invoke-WebRequest -Uri "https://github.com/MBNpro-ir/syd/releases/latest/downloa
 
 **Features of syd.bat:**
 - 🚀 **Direct Launch**: No menu needed - launches directly!
-- 🔄 **Auto-Update**: Always downloads the latest version automatically
-- 🖥️ **Desktop Shortcut**: Automatically creates a desktop shortcut for easy access
-- 🎨 **User-Friendly**: Colorful interface with error handling
+- 🧠 **Smart Updates**: Intelligent version checking - only updates when necessary
+- 🖥️ **Desktop Shortcut**: Automatically creates a desktop shortcut with custom icon
+- 🎨 **User-Friendly**: Colorful interface with comprehensive error handling
 - 📁 **Auto-Organize**: Downloads files and automatically opens the folder
+- ⚡ **Lightning Fast**: Skip unnecessary downloads when files are up-to-date
 
 ### **Option 3: Direct PowerShell (Advanced Users)**
 ```powershell
@@ -113,23 +114,32 @@ cd syd
 When you run `syd.bat`, it will automatically:
 
 1. **Create SYD folder** if it doesn't exist
-2. **Download latest version** of syd.ps1 into the SYD folder
-3. **Launch the downloader** immediately
-4. **Create desktop shortcut** for easy future access
+2. **Smart update check** - only downloads if there's a real update
+3. **Download/update files** only when necessary (script + logo)
+4. **Create desktop shortcut** with custom icon (if missing)
+5. **Launch the downloader** immediately
 
 **No menu needed** - it launches directly to the YouTube downloader!
 
+**🧠 Intelligent Update System:**
+- **First Run**: Downloads everything and sets up the environment
+- **Subsequent Runs**: Quick version check, instant launch if up-to-date
+- **Real Updates**: Only downloads when GitHub actually has newer files
+- **Smart Detection**: Uses ETag and file size comparison for accuracy
+
 **Benefits:**
-- 🚀 **Instant Launch**: No menu navigation needed
-- 🔄 **Always Latest**: Auto-downloads the newest version
-- 🖥️ **Desktop Shortcut**: Creates shortcut automatically with logo icon
-- 🎨 **User-Friendly**: Colorful interface with error handling
+- 🚀 **Lightning Fast**: Instant launch when no updates needed
+- 🧠 **Smart Updates**: Only downloads when files actually change
+- 🖥️ **Desktop Shortcut**: Creates shortcut automatically with custom logo
+- 🎨 **User-Friendly**: Colorful interface with comprehensive error handling
 - 📁 **Auto-Open Folder**: Opens download folder automatically after each download
+- 📂 **Organized Structure**: All files neatly organized in `SYD/` folder
 
 **🔁 Re-running the Program:**
 - You can run `.\syd.bat` again anytime from PowerShell or CMD
 - Or use the desktop shortcut created automatically
-- Each time it will check for updates and launch the latest version
+- **Fast Launch**: If no updates, launches in seconds
+- **Smart Updates**: Only downloads when GitHub has actual updates
 
 ### **🔒 Windows 11 PowerShell Execution Policy Setup**
 
@@ -240,14 +250,13 @@ Files are automatically organized in the `Downloaded` folder:
 - 🖥️ **Desktop Shortcut**: A shortcut is created on your desktop for easy access
 - 🔄 **Always Updated**: Each run checks for and downloads the latest version
 
----
 
 ## 🚀 Different Ways to Run SYD
 
 ### **🖥️ Desktop Shortcut (Easiest)**
 - After first run, use the desktop shortcut "SYD - YouTube Downloader"
 - Double-click to launch instantly
-- Features custom logo icon (if logo.png exists)
+- Features custom logo icon (if logo.ico exists)
 
 ### **💻 Command Line**
 ```powershell
@@ -280,13 +289,14 @@ Files are automatically organized in the `Downloaded` folder:
 │   ├── 📄 settings.json          # Configuration file
 │   ├── 📄 cookies.txt            # YouTube cookies (if added)
 │   ├── 📄 debug.txt              # Debug/error logs
-│   └── 📄 video_cache.json       # Video information cache
+│   ├── 📄 video_cache.json       # Video information cache
+│   ├── 📄 version_cache.txt      # Version check cache
+│   └── 📄 logo.ico               # Downloaded logo for shortcut
 ├── 📁 Downloaded/                # Your downloaded content
 │   ├── 📁 Video/                 # Video files
 │   ├── 📁 Audio/                 # Audio files
 │   └── 📁 Covers/                # Thumbnail images
-├── 📁 Temp/                      # Temporary files (auto-cleaned)
-└── 📄 logo.png                   # Downloaded logo for shortcut
+└── 📁 Temp/                      # Temporary files (auto-cleaned)
 ```
 
 ### **🔧 Settings.json Configuration**
@@ -670,6 +680,12 @@ We welcome suggestions for new features and improvements!
 - **Auto-Open Folders**: Downloaded files' folders open automatically
 - **Desktop Shortcut**: Automatic shortcut creation with custom logo
 - **Smart Organization**: Files organized in SYD folder structure
+
+### **🧠 Intelligent Update System**
+- **Smart Version Checking**: ETag-based detection eliminates false updates
+- **Lightning Fast Launches**: Skip downloads when files are up-to-date
+- **Bandwidth Optimization**: Only downloads when GitHub has real updates
+- **Multi-Layer Validation**: ETag + file size + cache comparison
 
 ### **🧠 Enhanced Error Handling**
 - **15+ Error Types**: Specific solutions for each error category
