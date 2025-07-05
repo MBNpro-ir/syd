@@ -13,7 +13,7 @@ Add-Type -AssemblyName System.Web
 $scriptDir = $PSScriptRoot
 $settingsPath = Join-Path $scriptDir "settings.json"
 $settings = $null
-$DebugLogPath = Join-Path $scriptDir "debug.txt"
+$DebugLogPath = $null  # Will be set after loading settings
 
 $originalBackground = $Host.UI.RawUI.BackgroundColor
 $originalForeground = $Host.UI.RawUI.ForegroundColor
@@ -207,7 +207,13 @@ function Show-EnhancedError {
     Write-Host ""
     
     Write-Host "📋 TECHNICAL DETAILS:" -ForegroundColor Yellow
-    Write-Host "   $TechnicalError" -ForegroundColor Gray
+    # Truncate very long technical errors to avoid terminal spam
+    $truncatedTechnicalError = if ($TechnicalError.Length -gt 800) {
+        $TechnicalError.Substring(0, 800) + "... [Error message truncated - full details in debug log]"
+    } else {
+        $TechnicalError
+    }
+    Write-Host "   $truncatedTechnicalError" -ForegroundColor Gray
     Write-Host ""
     
     Write-Host "🔗 NEED HELP?" -ForegroundColor Cyan
@@ -239,6 +245,7 @@ function Get-ValidatedUserInput {
         
         Write-Host $Prompt -NoNewline -ForegroundColor Green
         $userInput = Read-Host " "
+        Write-UserInputLog $Prompt $userInput
         
         # Validate based on input type
         switch ($InputType) {
@@ -312,25 +319,37 @@ function Load-Settings {
                 advanced = if ($fileSettings.advanced) { $fileSettings.advanced } else { $defaultSettings.advanced }
             }
             
+            # Initialize debug logging after settings are loaded
+            $debugInitialized = Initialize-DebugLogging
+            
             Write-Host "Settings loaded from $settingsPath" -ForegroundColor Green
-            Write-ErrorLog "Settings loaded successfully from $settingsPath"
+            if ($debugInitialized) {
+                Write-ErrorLog "=== SCRIPT STARTUP ==="
+                Write-ErrorLog "Settings loaded successfully from $settingsPath"
+                Write-ErrorLog "Debug logging enabled - Level: $([bool]$settings.advanced.enable_debug_logging)"
+                Write-ErrorLog "Log file path: $global:DebugLogPath"
+                Write-ErrorLog "Script arguments: $($MyInvocation.BoundParameters | ConvertTo-Json -Compress)"
+            }
         } catch {
             Write-Warning "Failed to load settings from $settingsPath. Using default settings."
-            Write-ErrorLog "Failed to load settings: $($_.Exception.Message)"
             $global:settings = $defaultSettings
+            Initialize-DebugLogging
+            Write-ErrorLog "Failed to load settings: $($_.Exception.Message)"
         }
     } else {
         Write-Warning "Settings file not found. Creating new settings file..."
+        $global:settings = $defaultSettings
+        Initialize-DebugLogging
         Write-ErrorLog "Settings file not found, creating new one"
         
         # Create settings file
         if (Create-SettingsFile -Path $settingsPath) {
             Write-Host "Created new settings file with default values." -ForegroundColor Green
+            Write-ErrorLog "Settings file created successfully"
         } else {
             Write-Warning "Could not create settings file. Using default settings in memory."
+            Write-ErrorLog "Failed to create settings file, using default settings in memory"
         }
-        
-        $global:settings = $defaultSettings
     }
 }
 
@@ -698,27 +717,78 @@ function Show-CustomDownloadProgress {
     Write-Host $statusLine -ForegroundColor $color -NoNewline
 }
 
+function Initialize-DebugLogging {
+    # Set global debug logging path based on settings
+    if ($settings -and [bool]$settings.advanced.enable_debug_logging) {
+        $global:DebugLogPath = Join-Path $scriptDir $settings.advanced.log_file_path
+        
+        # Create/Clear the debug log file for new session
+        try {
+            $sessionStart = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $header = @"
+===============================================================================
+DEBUG LOG SESSION STARTED: $sessionStart
+Script Directory: $scriptDir
+PowerShell Version: $($PSVersionTable.PSVersion)
+OS Version: $([System.Environment]::OSVersion.VersionString)
+===============================================================================
+
+"@
+            Set-Content -Path $global:DebugLogPath -Value $header -Encoding UTF8 -ErrorAction Stop
+            return $true
+        } catch {
+            Write-Warning "Failed to initialize debug log: $($_.Exception.Message)"
+            $global:DebugLogPath = $null
+            return $false
+        }
+    } else {
+        $global:DebugLogPath = $null
+        return $false
+    }
+}
+
 function Write-ErrorLog {
     param ([string]$message)
     
-    # Use settings for debug logging if available, otherwise use default
-    $enableLogging = if ($settings -and $settings.advanced.enable_debug_logging) { [bool]$settings.advanced.enable_debug_logging } else { $true }
-    if (-not $enableLogging) {
+    # Only log if debug logging is enabled and path is set
+    if (-not $global:DebugLogPath -or -not $settings -or -not [bool]$settings.advanced.enable_debug_logging) {
         return
-    }
-    
-    $logPath = if ($settings -and $settings.advanced.log_file_path) { 
-        Join-Path $scriptDir $settings.advanced.log_file_path 
-    } else { 
-        $DebugLogPath 
     }
     
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "$timestamp - $message"
     try {
-        Add-Content -Path $logPath -Value $logMessage -Encoding UTF8 -ErrorAction Stop
+        Add-Content -Path $global:DebugLogPath -Value $logMessage -Encoding UTF8 -ErrorAction Stop
     } catch {
-        Write-Warning "Failed to write to debug log: $($_.Exception.Message)"
+        # Silently fail to avoid spam if logging fails
+    }
+}
+
+function Write-UserInputLog {
+    param (
+        [string]$prompt,
+        [string]$userInput
+    )
+    
+    if ($global:DebugLogPath) {
+        Write-ErrorLog "USER INPUT - Prompt: '$prompt' | Input: '$userInput'"
+    }
+}
+
+function Write-SessionEndLog {
+    if ($global:DebugLogPath) {
+        $sessionEnd = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $footer = @"
+
+===============================================================================
+DEBUG LOG SESSION ENDED: $sessionEnd
+===============================================================================
+"@
+        try {
+            Add-Content -Path $global:DebugLogPath -Value $footer -Encoding UTF8 -ErrorAction Stop
+        } catch {
+            # Silently fail
+        }
     }
 }
 
@@ -995,10 +1065,10 @@ function Add-EnhancedHeaders {
         [System.Collections.Generic.List[string]]$ArgumentsList
     )
     
-    # Add enhanced headers to avoid 403 errors
+    # Add enhanced headers to avoid 403 errors, aligned with Get-VideoInfoWithTimeout
     $ArgumentsList.Add("--no-check-certificate")
     $ArgumentsList.Add("--user-agent")
-    $ArgumentsList.Add("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    $ArgumentsList.Add("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
     $ArgumentsList.Add("--add-header")
     $ArgumentsList.Add("Accept-Language:en-US,en;q=0.9")
     $ArgumentsList.Add("--add-header")
@@ -1053,6 +1123,16 @@ function Get-QualityPrefix {
                 return "[Audio-${format.format_id}]"
             }
         }
+        "original_audio" {
+            $format = $SelectedOption.Format
+            $ext = $format.ext
+            if ($format.abr) {
+                return "[Original-$($ext)-$($format.abr)k]"
+            } else {
+                return "[Original-$($ext)-${format.format_id}]"
+            }
+        }
+
         default {
             return "[Download]"
         }
@@ -1065,7 +1145,7 @@ function New-DownloadArguments {
         [string]$OutputTemplate,
         [string]$Format,
         [string]$Url,
-        [string]$Type = "video",  # "video", "audio", "audio_specific"
+        [string]$Type = "video",  # "video", "audio", "audio_specific", "original_audio", "original_video", "original_no_conversion", "force_mp4"
         [int]$Bitrate = 0,
         [bool]$UseCookies = $false,
         [string]$CookieFilePath = ""
@@ -1078,11 +1158,17 @@ function New-DownloadArguments {
     # Add proxy if configured
     if ($env:HTTP_PROXY) {
         $args.Add("--proxy"); $args.Add($env:HTTP_PROXY)
+        Write-ErrorLog "Download proxy added: $($env:HTTP_PROXY)"
+    } else {
+        Write-ErrorLog "No proxy configured for download"
     }
     
     # Add cookies if available
     if ($UseCookies -and $CookieFilePath -and (Test-Path $CookieFilePath)) {
         $args.Add("--cookies"); $args.Add($CookieFilePath)
+        Write-ErrorLog "Download cookies added: $CookieFilePath"
+    } else {
+        Write-ErrorLog "No cookies configured for download - UseCookies: $UseCookies, CookieFilePath: $CookieFilePath, FileExists: $(if ($CookieFilePath) { Test-Path $CookieFilePath } else { 'N/A' })"
     }
     
     $args.Add("--ffmpeg-location"); $args.Add($FfmpegPath)
@@ -1091,6 +1177,22 @@ function New-DownloadArguments {
     
     switch ($Type) {
         "video" {
+            $args.Add("--merge-output-format"); $args.Add("mp4")
+            $args.Add("--write-subs")
+            $args.Add("--sub-lang"); $args.Add("fa,en")
+            $args.Add("--embed-subs")
+            $args.Add("--convert-subs"); $args.Add("srt")
+        }
+        "original_video" {
+            # Keep original format without conversion but merge with audio
+            $args.Add("--write-subs")
+            $args.Add("--sub-lang"); $args.Add("fa,en")
+            $args.Add("--embed-subs")
+            $args.Add("--convert-subs"); $args.Add("srt")
+            # No merge-output-format to preserve original container
+        }
+        "force_mp4" {
+            # Force MP4 container for specific formats
             $args.Add("--merge-output-format"); $args.Add("mp4")
             $args.Add("--write-subs")
             $args.Add("--sub-lang"); $args.Add("fa,en")
@@ -1108,6 +1210,16 @@ function New-DownloadArguments {
             $args.Add("--extract-audio")
             $args.Add("--audio-format"); $args.Add("mp3")
         }
+
+        "original_no_conversion" {
+            # Keep original format without any conversion
+            # No additional arguments needed - downloads as-is
+        }
+        "original_audio" {
+            # Extract audio in original format without conversion
+            $args.Add("--extract-audio")
+            # No --audio-format specified to keep original format
+        }
     }
     
     $args.Add($Url)
@@ -1124,24 +1236,37 @@ function Get-VideoInfoWithTimeout {
     )
     
     Write-ErrorLog "Attempting to get video info with timeout: $TimeoutSeconds seconds"
+    Write-ErrorLog "Target URL: $Url"
+    Write-ErrorLog "Using cookies: $UseCookies"
+    if ($UseCookies -and $CookieFilePath) {
+        Write-ErrorLog "Cookie file path: $CookieFilePath"
+        Write-ErrorLog "Cookie file exists: $(Test-Path $CookieFilePath)"
+    }
+    
+    # Pass proxy info explicitly to job since environment variables don't transfer
+    $proxyUrl = $env:HTTP_PROXY
     
     $job = Start-Job -ScriptBlock {
-        param($url, $ytDlpPath, $useCookies, $cookieFilePath)
+        param($url, $ytDlpPath, $useCookies, $cookieFilePath, $proxyUrl)
         
         $args = @(
             "--dump-json", 
             "--no-warnings", 
             "--no-check-certificate",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             "--add-header", "Accept-Language:en-US,en;q=0.9",
             "--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "--add-header", "Sec-Fetch-Mode:navigate"
         )
         
-        # Add proxy if configured
-        if ($env:HTTP_PROXY) {
+        # Add proxy if configured (now passed explicitly)
+        if ($proxyUrl) {
             $args += "--proxy"
-            $args += $env:HTTP_PROXY
+            $args += $proxyUrl
+            # Return proxy info for parent script logging
+            "PROXY_USED:$proxyUrl" | Out-Host
+        } else {
+            "NO_PROXY_CONFIGURED" | Out-Host
         }
         
         if ($useCookies -and $cookieFilePath -and (Test-Path $cookieFilePath)) {
@@ -1149,6 +1274,10 @@ function Get-VideoInfoWithTimeout {
             $args += $cookieFilePath
         }
         $args += $url
+        
+        # Debug logging for troubleshooting
+        # Note: This runs in a job, so we can't use Write-ErrorLog here
+        # But we can return debug info that will be logged in the main script
         
         try {
             $output = & $ytDlpPath @args 2>&1
@@ -1174,13 +1303,25 @@ function Get-VideoInfoWithTimeout {
                 ExitCode = -1
             }
         }
-    } -ArgumentList $Url, $YtDlpPath, $UseCookies, $CookieFilePath
+    } -ArgumentList $Url, $YtDlpPath, $UseCookies, $CookieFilePath, $proxyUrl
     
     try {
         $completed = Wait-Job -Job $job -Timeout $TimeoutSeconds
         
         if ($completed) {
             $result = Receive-Job -Job $job
+            
+            # Log proxy usage info from job output
+            $proxyInfo = $result.Output | Where-Object { $_ -like "PROXY_USED:*" -or $_ -eq "NO_PROXY_CONFIGURED" }
+            if ($proxyInfo) {
+                Write-ErrorLog "Video info job proxy status: $proxyInfo"
+            }
+            
+            # Filter out our debug messages from the actual output
+            if ($result.Output) {
+                $result.Output = $result.Output | Where-Object { $_ -notlike "PROXY_USED:*" -and $_ -ne "NO_PROXY_CONFIGURED" }
+            }
+            
             Remove-Job -Job $job
             Write-ErrorLog "Video info job completed within timeout. Success: $($result.Success), ExitCode: $($result.ExitCode)"
             return $result
@@ -1211,7 +1352,13 @@ function Show-ErrorHandlingOptions {
     )
     
     Write-Host "`n-------------------- ERROR HANDLING OPTIONS --------------------" -ForegroundColor Red
-    Write-Host "Failed to retrieve video information: $ErrorMessage" -ForegroundColor Red
+    # Show only a brief error summary to avoid terminal clutter
+    $briefError = if ($ErrorMessage.Length -gt 200) {
+        $ErrorMessage.Substring(0, 200) + "... [See debug log for full details]"
+    } else {
+        $ErrorMessage
+    }
+    Write-Host "Failed to retrieve video information: $briefError" -ForegroundColor Red
     Write-Host ""
     Write-Host "Available options:" -ForegroundColor Yellow
     Write-Host "1. Try with cookies (if configured)" -ForegroundColor White
@@ -1693,7 +1840,7 @@ function Show-FormatsMenu {
     $titleDisplay = $VideoTitle
     if ($titleDisplay.Length -gt 65) { $titleDisplay = $titleDisplay.Substring(0, 62) + "..." }
     Write-Host $titleDisplay.PadRight(71) -NoNewline -ForegroundColor White
-    Write-Host " ║" -ForegroundColor Cyan
+    Write-Host "║" -ForegroundColor Cyan
     Write-Host "╚═══════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
     
     $menuOptions = @()
@@ -1733,13 +1880,13 @@ function Show-FormatsMenu {
         }
     }
     
-    # --- Video-Only Formats (Grouped by Codec) ---
+    # --- Video-Only Formats (Grouped by Extension) ---
     if ($videoFormats.Count -gt 0) {
-        Write-Host "`n--- Video-Only Formats (will be merged with best audio) ---" -ForegroundColor Green
-        $videoCodecGroups = $videoFormats | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Details.VideoCodec) } | Group-Object -Property {$_.Details.VideoCodec}
+        Write-Host "`n--- Video-Only Formats (merged with best audio) ---" -ForegroundColor Yellow
+        $videoExtGroups = $videoFormats | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Details.Extension) } | Group-Object -Property {$_.Details.Extension}
         
-        foreach ($group in $videoCodecGroups) {
-            Write-Host "`n  Codec: $($group.Name)" -ForegroundColor Yellow
+        foreach ($group in $videoExtGroups) {
+            Write-Host "`n  $($group.Name)" -ForegroundColor Yellow
             $headerVideo = "{0,-9} | {1,-4} | {2,-10} | {3,-15} | {4,-11} | {5,-8} | {6,-8} | {7}" -f "Format ID", "Ext", "Resolution", "Video Codec", "Size", "Bitrate", "FPS", "Note"
             Write-Host (" " * 4) $headerVideo -ForegroundColor Yellow
             Write-Host (" " * 4) ("-" * $headerVideo.Length) -ForegroundColor Gray
@@ -1750,7 +1897,7 @@ function Show-FormatsMenu {
                 $displayNum = "{0,2}." -f $optionNumber
                 Write-Host " $displayNum $line" -ForegroundColor White
 
-                $menuOptions += @{ Number = $optionNumber; Type = "specific_video"; Format = $fmt.Format; Description = "Download $($d.Resolution) video" }
+                $menuOptions += @{ Number = $optionNumber; Type = "specific_video"; Format = $fmt.Format; Description = "Download $($d.Resolution) video merged with audio as $($d.Extension)" }
                 $optionNumber++
             }
         }
@@ -1787,11 +1934,30 @@ function Show-FormatsMenu {
 
     # --- Specific Original Audio Formats ---
     if ($audioFormats.Count -gt 0) {
-        Write-Host "`n  --- Original Audio Formats (will be converted to MP3) ---" -ForegroundColor Yellow
+        Write-Host "`n  --- Original Audio Formats (keep original format) ---" -ForegroundColor Green
         $audioCodecGroups = $audioFormats | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Details.AudioCodec) } | Group-Object -Property {$_.Details.AudioCodec}
 
         foreach ($group in $audioCodecGroups) {
-            Write-Host "`n    Codec: $($group.Name)" -ForegroundColor Yellow
+            Write-Host "`n    Codec: $($group.Name)" -ForegroundColor Green
+            $headerAudio = "{0,-9} | {1,-4} | {2,-15} | {3,-11} | {4,-8} | {5}" -f "Format ID", "Ext", "Audio Codec", "Size", "Bitrate", "Note"
+            Write-Host (" " * 6) $headerAudio -ForegroundColor Green
+            Write-Host (" " * 6) ("-" * $headerAudio.Length) -ForegroundColor Gray
+
+            foreach ($fmt in $group.Group) {
+                $d = $fmt.Details
+                $line = "{0,-9} | {1,-4} | {2,-15} | {3,-11} | {4,-8} | {5}" -f $d.FormatId, $d.Extension, $d.AudioCodec, $d.FileSize, $d.Bitrate, $d.Note
+                $displayNum = "{0,2}." -f $optionNumber
+                Write-Host "   $displayNum $line" -ForegroundColor White
+
+                $menuOptions += @{ Number = $optionNumber; Type = "original_audio"; Format = $fmt.Format; Description = "Download $($d.AudioCodec) audio (original format)" }
+                $optionNumber++
+            }
+        }
+        
+        # Add separator for MP3 conversion options
+        Write-Host "`n  --- Audio to MP3 Conversion Options ---" -ForegroundColor Yellow
+        foreach ($group in $audioCodecGroups) {
+            Write-Host "`n    Codec: $($group.Name) → MP3" -ForegroundColor Yellow
             $headerAudio = "{0,-9} | {1,-4} | {2,-15} | {3,-11} | {4,-8} | {5}" -f "Format ID", "Ext", "Audio Codec", "Size", "Bitrate", "Note"
             Write-Host (" " * 6) $headerAudio -ForegroundColor Yellow
             Write-Host (" " * 6) ("-" * $headerAudio.Length) -ForegroundColor Gray
@@ -1802,7 +1968,7 @@ function Show-FormatsMenu {
                 $displayNum = "{0,2}." -f $optionNumber
                 Write-Host "   $displayNum $line" -ForegroundColor White
 
-                $menuOptions += @{ Number = $optionNumber; Type = "specific_audio"; Format = $fmt.Format; Description = "Download $($d.AudioCodec) audio" }
+                $menuOptions += @{ Number = $optionNumber; Type = "specific_audio"; Format = $fmt.Format; Description = "Download $($d.AudioCodec) audio and convert to MP3" }
                 $optionNumber++
             }
         }
@@ -2292,30 +2458,45 @@ try {
 }
 
 # Set up proxy configuration
+Write-ErrorLog "=== INITIALIZING COMPONENTS ==="
+Write-ErrorLog "Setting up proxy configuration"
 Set-ProxyConfiguration
 
 # Initialize database
+Write-ErrorLog "Initializing database"
 Initialize-Database
 
 $ytDlpPath = Join-Path $scriptDir "yt-dlp.exe"
 $ffmpegPath = Join-Path $scriptDir "ffmpeg.exe"
+Write-ErrorLog "yt-dlp path: $ytDlpPath"
+Write-ErrorLog "ffmpeg path: $ffmpegPath"
 
 # Check and update yt-dlp
+Write-ErrorLog "Checking and updating yt-dlp"
 Update-YtDlp -YtDlpPath $ytDlpPath
 
 # Check and update ffmpeg
+Write-ErrorLog "Checking and updating ffmpeg"
 Update-Ffmpeg -FfmpegPath $ffmpegPath
 
 if ($env:PATH -notlike "*;$($scriptDir);*") {
     $env:PATH = "$($scriptDir);$($env:PATH)"
     Write-ErrorLog "Added script directory to session PATH: $scriptDir"
+} else {
+    Write-ErrorLog "Script directory already in PATH: $scriptDir"
 }
 
 $Host.UI.RawUI.BackgroundColor = "Black"
 $Host.UI.RawUI.ForegroundColor = "White"
 Clear-Host
 
+Write-ErrorLog "=== USER INTERFACE INITIALIZED ==="
+Write-ErrorLog "Background color set to: Black"
+Write-ErrorLog "Foreground color set to: White"
+Write-ErrorLog "Screen cleared for fresh start"
+
 # Display welcome banner
+Write-ErrorLog "Displaying welcome banner"
 Write-Host ""
 Write-Host "╔═══════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "║                                                                               ║" -ForegroundColor Cyan
@@ -2362,13 +2543,20 @@ $videoOutputDir = Join-Path $downloadedDir $settings.download.video_subdirectory
 $audioOutputDir = Join-Path $downloadedDir $settings.download.audio_subdirectory
 $coversOutputDir = Join-Path $downloadedDir $settings.download.covers_subdirectory
 
+Write-ErrorLog "=== INITIALIZING DIRECTORIES ==="
+Write-ErrorLog "Creating directory: $tempDir"
 Initialize-Directory $tempDir
+Write-ErrorLog "Creating directory: $downloadedDir"
 Initialize-Directory $downloadedDir
+Write-ErrorLog "Creating directory: $videoOutputDir"
 Initialize-Directory $videoOutputDir
+Write-ErrorLog "Creating directory: $audioOutputDir"
 Initialize-Directory $audioOutputDir
+Write-ErrorLog "Creating directory: $coversOutputDir"
 Initialize-Directory $coversOutputDir
 
 $continueWithNewLink = 'y' 
+Write-ErrorLog "=== MAIN EXECUTION LOOP STARTED ==="
 
 do { 
     Write-Host "╭──────────────────────────────╮" -ForegroundColor Cyan
@@ -2384,31 +2572,51 @@ do {
     }
 
     if ($userInputUrl -eq 'exit') {
+        Write-ErrorLog "User selected exit command"
         $continueWithNewLink = 'n'
         continue
     }
 
     if ($userInputUrl -match '^\-h$' -or $userInputUrl -match '^\-{1,2}help$' -or $userInputUrl -eq 'help') {
+        Write-ErrorLog "User requested help"
         Show-ScriptHelp
         continue
     }
     
     if ($userInputUrl -eq 'clear-cache') {
+        Write-ErrorLog "User requested clear-cache"
         Clear-VideoCache
         continue
     }
     
     if ($userInputUrl -eq 'folder') {
+        Write-ErrorLog "User requested folder open"
         Open-ProgramFolder
         continue
     }
     
     if ($userInputUrl -eq 'settings') {
+        Write-ErrorLog "User requested settings open"
         Open-SettingsFile
         continue
     }
     
-    $currentUrl = $userInputUrl 
+    # Clean the URL to remove potentially problematic parameters
+    $currentUrl = $userInputUrl
+    
+    # For YouTube URLs, remove certain parameters that might cause 403 errors
+    if ($currentUrl -match "youtube\.com|youtu\.be") {
+        $currentUrl = $currentUrl -replace "&pp=[^&]*", ""  # Remove pp parameter
+        $currentUrl = $currentUrl -replace "\?pp=[^&]*&?", "?"  # Remove pp parameter if it's first
+        $currentUrl = $currentUrl -replace "\?&", "?"  # Clean up malformed query string
+        $currentUrl = $currentUrl -replace "\?$", ""  # Remove trailing question mark
+        
+        if ($currentUrl -ne $userInputUrl) {
+            Write-ErrorLog "URL cleaned from: $userInputUrl"
+            Write-ErrorLog "URL cleaned to: $currentUrl"
+        }
+    }
+    
     Write-ErrorLog "Attempting to process URL: $currentUrl"
     
     # Always initialize cookie variables for each URL processing
@@ -2456,23 +2664,43 @@ do {
                     Show-VideoDetails -VideoInfo $videoInfo
                     break
                 } catch {
-                    $logMsg = "Failed to parse JSON for '$currentUrl'. JSON String: $($result.Output -join [System.Environment]::NewLine). Exception: $($_.Exception.Message)"
-                    Write-ErrorLog $logMsg
+                    # Create a truncated version for console display
+                    $fullJsonString = $result.Output -join [System.Environment]::NewLine
+                    $truncatedJson = if ($fullJsonString.Length -gt 500) {
+                        $fullJsonString.Substring(0, 500) + "... [JSON truncated for display]"
+                    } else {
+                        $fullJsonString
+                    }
+                    
+                    # Log full JSON to debug file only
+                    $fullLogMsg = "Failed to parse JSON for '$currentUrl'. Full JSON String: $fullJsonString. Exception: $($_.Exception.Message)"
+                    Write-ErrorLog $fullLogMsg
+                    
+                    # Create user-friendly message for console
+                    $userFriendlyLogMsg = "Failed to parse JSON for '$currentUrl'. JSON Preview: $truncatedJson. Exception: $($_.Exception.Message)"
                     
                     if ($retryCount -eq $maxRetries) {
                         Resolve-ScriptError -UserMessage "Received invalid video information from yt-dlp. The video might be unsupported or an internal error occurred." `
-                                           -InternalLogMessage $logMsg
+                                           -InternalLogMessage $userFriendlyLogMsg
                         break
                     }
                 }
             } else {
                 # Failed - handle error
                 $errorMessage = if ($result.Error) { $result.Error } else { "Unknown error occurred" }
+                
+                # Truncate very long error messages for display
+                $truncatedErrorMessage = if ($errorMessage.Length -gt 1000) {
+                    $errorMessage.Substring(0, 1000) + "... [Error truncated - full details in debug log]"
+                } else {
+                    $errorMessage
+                }
+                
                 Write-ErrorLog "Failed to get video info for '$currentUrl'. Error: $errorMessage. Exit Code: $($result.ExitCode)"
                 
                 if ($retryCount -eq $maxRetries) {
                     # Show error handling options
-                    $userChoice = Show-ErrorHandlingOptions -Url $currentUrl -ErrorMessage $errorMessage
+                    $userChoice = Show-ErrorHandlingOptions -Url $currentUrl -ErrorMessage $truncatedErrorMessage
                     
                     switch ($userChoice) {
                         "cookies" {
@@ -2529,16 +2757,53 @@ do {
     }
 
     $downloadAnotherFormatForSameUrl = 'y' 
+    $firstTimeShowingMenu = $true
     do { 
 
         $formats = $videoInfo.formats
         
-        # Show the new detailed formats menu
-        $menuOptions = Show-FormatsMenu -Formats $formats -VideoTitle $videoInfo.title
+        # Show the new detailed formats menu only first time
+        if ($firstTimeShowingMenu) {
+            $menuOptions = Show-FormatsMenu -Formats $formats -VideoTitle $videoInfo.title
+            $firstTimeShowingMenu = $false
+        } else {
+            # For subsequent downloads, just show a quick selection prompt
+            Write-Host ""
+            Write-Host "📊 " -NoNewline -ForegroundColor Yellow
+            Write-Host "Ready to download another format..." -ForegroundColor White
+            Write-Host ""
+            Write-Host "💡 Tip: Refer to the format table above for available options" -ForegroundColor Gray
+            Write-Host "🔄 Type 'menu' to show the full format table again" -ForegroundColor Cyan
+        }
         
         $maxOption = $menuOptions.Count
         Write-Host ""
-        $userSelectionInput = Get-ValidatedUserInput -Prompt "👉 Select an option:" -InputType "number" -MinValue 1 -MaxValue $maxOption -MaxAttempts 3
+        
+        # Get user input with special handling for 'menu' command
+        do {
+            $showMenuAgain = $false
+            Write-Host "👉 Select an option: " -NoNewline -ForegroundColor Green
+            $userInput = Read-Host " "
+            
+            if ($userInput.ToLower() -eq "menu") {
+                $menuOptions = Show-FormatsMenu -Formats $formats -VideoTitle $videoInfo.title
+                $maxOption = $menuOptions.Count
+                $showMenuAgain = $true
+                Write-Host ""
+            } elseif ($userInput -match "^\d+$") {
+                $userSelectionInput = [int]$userInput
+                if ($userSelectionInput -ge 1 -and $userSelectionInput -le $maxOption) {
+                    break
+                } else {
+                    Write-Host "Please enter a number between 1 and $maxOption" -ForegroundColor Red
+                    $showMenuAgain = $true
+                }
+            } else {
+                Write-Host "Please enter a valid number or 'menu' to show format table" -ForegroundColor Red
+                $showMenuAgain = $true
+            }
+        } while ($showMenuAgain)
+        
         Write-Host ""
 
         if ($null -eq $userSelectionInput) {
@@ -2550,8 +2815,11 @@ do {
         
         if (-not $selectedOption) {
             Write-Host "Invalid selection. Please try again." -ForegroundColor Red
+            Write-ErrorLog "Invalid selection: $userSelectionInput"
             continue
         }
+        
+        Write-ErrorLog "User selected option $userSelectionInput - Type: $($selectedOption.Type) - Format: $($selectedOption.Format.format_id)"
         
  
             $isVideoDownload = $false # Default to false
@@ -2605,8 +2873,6 @@ do {
                                 ErrorAction = "Stop"
                                 UseBasicParsing = $true
                                 TimeoutSec = 30
-                                MaximumRetryCount = 3
-                                RetryIntervalSec = 2
                             }
                             
                             # Add User-Agent to avoid blocking
@@ -2619,15 +2885,44 @@ do {
                                 $webRequestParams.Proxy = $env:HTTP_PROXY
                             }
                             
-                            Invoke-WebRequest @webRequestParams
+                            # Manual retry logic for PowerShell 5.1 compatibility
+                            $maxRetries = 3
+                            $retryCount = 0
+                            $downloadSuccess = $false
+                            
+                            while ($retryCount -lt $maxRetries -and -not $downloadSuccess) {
+                                try {
+                                    if ($retryCount -gt 0) {
+                                        Write-Host "Retry attempt $($retryCount + 1)..." -ForegroundColor Yellow
+                                        Start-Sleep -Seconds 2
+                                    }
+                                    
+                                    Invoke-WebRequest @webRequestParams
+                                    $downloadSuccess = $true
+                                } catch {
+                                    $retryCount++
+                                    if ($retryCount -eq $maxRetries) {
+                                        throw $_
+                                    }
+                                }
+                            }
                             Write-Host "Cover downloaded to Temp: $tempCoverPath" -ForegroundColor Green
 
                             # Verify file was downloaded
-                            if (-not (Test-Path $tempCoverPath) -or (Get-Item $tempCoverPath).Length -eq 0) {
-                                throw "Downloaded file is missing or empty"
+                            Write-Host "Verifying downloaded file..." -ForegroundColor Yellow
+                            if (-not (Test-Path $tempCoverPath)) {
+                                throw "Downloaded file not found at: $tempCoverPath"
                             }
+                            
+                            $fileInfo = Get-Item $tempCoverPath
+                            if ($fileInfo.Length -eq 0) {
+                                throw "Downloaded file is empty (0 bytes)"
+                            }
+                            
+                            Write-Host "File verified: $($fileInfo.Length) bytes" -ForegroundColor Green
+                            Write-Host "Moving file to final destination..." -ForegroundColor Yellow
 
-                            Move-Item -Path $tempCoverPath -Destination $finalCoverPath -Force -ErrorAction Stop
+                            Move-Item -LiteralPath $tempCoverPath -Destination $finalCoverPath -Force -ErrorAction Stop
                             Write-Host "`nCover successfully downloaded and moved to:" -ForegroundColor Green
                             Write-Host "$finalCoverPath" -ForegroundColor Cyan
                             Write-ErrorLog "Successfully downloaded and moved cover '$finalCoverFileName' to '$finalCoverPath'."
@@ -2670,28 +2965,99 @@ do {
                                 if ($env:HTTP_PROXY) {
                                     $coverArgs += "--proxy"
                                     $coverArgs += $env:HTTP_PROXY
+                                    Write-ErrorLog "Cover download proxy added: $($env:HTTP_PROXY)"
+                                } else {
+                                    Write-ErrorLog "No proxy configured for cover download"
                                 }
                                 
                                 $coverResult = & $ytDlpPath @coverArgs 2>&1
+                                Write-Host "yt-dlp exit code: $LASTEXITCODE" -ForegroundColor Gray
+                                
                                 if ($LASTEXITCODE -eq 0) {
                                     # Find the downloaded thumbnail file
-                                    $thumbnailFiles = Get-ChildItem -Path $tempDir -File | Where-Object { $_.Name -like "*$($baseCoverName)*" -and ($_.Extension -eq ".jpg" -or $_.Extension -eq ".png" -or $_.Extension -eq ".webp") }
-                                    if ($thumbnailFiles) {
+                                    Write-Host "Searching for downloaded thumbnail files..." -ForegroundColor Yellow
+                                    Write-ErrorLog "Searching for cover files in directory: $tempDir"
+                                    
+                                    # List all files for debugging
+                                    $allTempFiles = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
+                                    Write-ErrorLog "All files in temp directory: $($allTempFiles.Count) files"
+                                    foreach ($file in $allTempFiles) {
+                                        Write-ErrorLog "Temp file: $($file.Name) | Extension: $($file.Extension) | Size: $($file.Length)"
+                                    }
+                                    
+                                    # Method 1: Look for files with [Cover] prefix
+                                    $thumbnailFiles = Get-ChildItem -Path $tempDir -File | Where-Object { 
+                                        $_.Name -like "*Cover*" -and ($_.Extension -eq ".jpg" -or $_.Extension -eq ".png" -or $_.Extension -eq ".webp" -or $_.Extension -eq ".jpeg")
+                                    }
+                                    Write-ErrorLog "Method 1 (*Cover* files): Found $($thumbnailFiles.Count) files"
+                                    
+                                    # Method 2: Look for any image files created recently
+                                    if (-not $thumbnailFiles) {
+                                        Write-ErrorLog "Method 1 failed, trying Method 2 (recent image files)"
+                                        $thumbnailFiles = Get-ChildItem -Path $tempDir -File | Where-Object { 
+                                            ($_.Extension -eq ".jpg" -or $_.Extension -eq ".png" -or $_.Extension -eq ".webp" -or $_.Extension -eq ".jpeg") -and
+                                            $_.CreationTime -gt (Get-Date).AddMinutes(-2)
+                                        }
+                                        Write-ErrorLog "Method 2: Found $($thumbnailFiles.Count) recent image files"
+                                    }
+                                    
+                                    # Method 3: Look for any image files regardless of creation time
+                                    if (-not $thumbnailFiles) {
+                                        Write-ErrorLog "Method 2 failed, trying Method 3 (all image files)"
+                                        $thumbnailFiles = Get-ChildItem -Path $tempDir -File | Where-Object { 
+                                            $_.Extension -eq ".jpg" -or $_.Extension -eq ".png" -or $_.Extension -eq ".webp" -or $_.Extension -eq ".jpeg"
+                                        }
+                                        Write-ErrorLog "Method 3: Found $($thumbnailFiles.Count) total image files"
+                                    }
+                                    
+                                    Write-Host "Found $($thumbnailFiles.Count) thumbnail files" -ForegroundColor Gray
+                                    
+                                    if ($thumbnailFiles -and $thumbnailFiles.Count -gt 0) {
                                         $downloadedThumb = $thumbnailFiles[0]
-                                        $finalCoverPath = Join-Path $coversOutputDir "[Cover] $($baseCoverName)$($downloadedThumb.Extension)"
-                                        Move-Item -Path $downloadedThumb.FullName -Destination $finalCoverPath -Force
-                                        Write-Host "`nCover successfully downloaded using yt-dlp:" -ForegroundColor Green
-                                        Write-Host "$finalCoverPath" -ForegroundColor Cyan
-                                        Write-ErrorLog "Successfully downloaded cover using yt-dlp: $finalCoverPath"
+                                        Write-Host "Using thumbnail: $($downloadedThumb.Name)" -ForegroundColor Green
+                                        Write-ErrorLog "Selected thumbnail: $($downloadedThumb.FullName)"
+                                        Write-ErrorLog "Thumbnail size: $($downloadedThumb.Length) bytes"
                                         
-                                        # Auto-open the folder containing the downloaded cover
+                                        $finalCoverPath = Join-Path $coversOutputDir "[Cover] $($baseCoverName)$($downloadedThumb.Extension)"
+                                        Write-ErrorLog "Moving thumbnail from: $($downloadedThumb.FullName)"
+                                        Write-ErrorLog "Moving thumbnail to: $finalCoverPath"
+                                        
                                         try {
-                                            Write-Host "🔍 Opening folder..." -ForegroundColor Green
-                                            Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$finalCoverPath`"" -ErrorAction Stop
-                                            Write-ErrorLog "Successfully opened folder for cover: $finalCoverPath"
+                                            # Ensure destination directory exists
+                                            if (-not (Test-Path $coversOutputDir)) {
+                                                New-Item -Path $coversOutputDir -ItemType Directory -Force | Out-Null
+                                                Write-ErrorLog "Created covers directory: $coversOutputDir"
+                                            }
+                                            
+                                            # Move the file
+                                            Move-Item -LiteralPath $downloadedThumb.FullName -Destination $finalCoverPath -Force -ErrorAction Stop
+                                            Write-ErrorLog "Move-Item completed successfully"
+                                            
+                                            # Verify the move
+                                            if (Test-Path -LiteralPath $finalCoverPath) {
+                                                Write-Host "`nCover successfully downloaded using yt-dlp:" -ForegroundColor Green
+                                                Write-Host "$finalCoverPath" -ForegroundColor Cyan
+                                                Write-ErrorLog "Successfully downloaded cover using yt-dlp: $finalCoverPath"
+                                                Write-ErrorLog "Final cover file size: $((Get-Item -LiteralPath $finalCoverPath).Length) bytes"
+                                                
+                                                # Auto-open the folder containing the downloaded cover
+                                                try {
+                                                    Write-Host "🔍 Opening folder..." -ForegroundColor Green
+                                                    Start-Process -FilePath "explorer.exe" -ArgumentList "/select,`"$finalCoverPath`"" -ErrorAction Stop
+                                                    Write-ErrorLog "Successfully opened folder for cover: $finalCoverPath"
+                                                } catch {
+                                                    Write-ErrorLog "Failed to open folder for cover: $($_.Exception.Message)"
+                                                    Write-Host "❌ Could not open folder automatically" -ForegroundColor Yellow
+                                                }
+                                            } else {
+                                                Write-ErrorLog "Move appeared successful but file not found at destination"
+                                                throw "Move appeared successful but file not found at destination: $finalCoverPath"
+                                            }
                                         } catch {
-                                            Write-ErrorLog "Failed to open folder for cover: $($_.Exception.Message)"
-                                            Write-Host "❌ Could not open folder automatically" -ForegroundColor Yellow
+                                            Write-ErrorLog "Failed to move thumbnail file: $($_.Exception.Message)"
+                                            Write-ErrorLog "Source exists: $(Test-Path -LiteralPath $downloadedThumb.FullName)"
+                                            Write-ErrorLog "Destination dir exists: $(Test-Path $coversOutputDir)"
+                                            throw "Failed to move thumbnail file: $($_.Exception.Message)"
                                         }
                                     } else {
                                         throw "yt-dlp completed but no thumbnail file found"
@@ -2725,9 +3091,12 @@ do {
                     $formatStringForDownload = $selectedOption.Format.format_id
                     $qualityPrefix = Get-QualityPrefix -Type "combined" -SelectedOption $selectedOption
                     $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
-                    Write-Host "Preparing to download combined format $formatStringForDownload..." -ForegroundColor Green
+                    $selectedExt = $selectedOption.Format.ext
+                    Write-Host "Preparing to download combined format $formatStringForDownload in original format ($selectedExt)..." -ForegroundColor Green
                     
-                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "video" -UseCookies $useCookies -CookieFilePath $cookieFilePath
+                    # Choose the right download type based on desired format
+                    $downloadType = if ($selectedExt -eq "mp4") { "force_mp4" } else { "original_video" }
+                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type $downloadType -UseCookies $useCookies -CookieFilePath $cookieFilePath
 
                     $isVideoDownload = $true
                 }
@@ -2737,9 +3106,12 @@ do {
                     $formatStringForDownload = "$($formatId)+bestaudio/best"
                     $qualityPrefix = Get-QualityPrefix -Type "specific_video" -SelectedOption $selectedOption
                     $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
-                    Write-Host "Preparing to download video format $formatId (merged with best audio)..." -ForegroundColor Green
+                    $selectedExt = $selectedOption.Format.ext
+                    Write-Host "Preparing to download video format $formatId (merged with best audio as $selectedExt)..." -ForegroundColor Green
                     
-                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "video" -UseCookies $useCookies -CookieFilePath $cookieFilePath
+                    # Choose the right download type based on desired format
+                    $downloadType = if ($selectedExt -eq "mp4") { "force_mp4" } else { "original_video" }
+                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type $downloadType -UseCookies $useCookies -CookieFilePath $cookieFilePath
                     
                     $isVideoDownload = $true
                 }
@@ -2767,6 +3139,20 @@ do {
                     
                     $isVideoDownload = $false
                 }
+
+                "original_audio" {
+                    $formatId = $selectedOption.Format.format_id
+                    $formatStringForDownload = $formatId
+                    $qualityPrefix = Get-QualityPrefix -Type "original_audio" -SelectedOption $selectedOption
+                    $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
+                    Write-Host "Preparing to download audio format $formatId in original format..." -ForegroundColor Green
+                    
+                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "original_audio" -UseCookies $useCookies -CookieFilePath $cookieFilePath
+                    
+                    $isVideoDownload = $false
+                }
+
+
                 
                 "new_link" {
                     Write-Host ""
@@ -2813,8 +3199,16 @@ do {
                     $downloadedFileInTemp = $null
                     $tempFilesList = Get-ChildItem -Path $tempDir -File -ErrorAction SilentlyContinue
                     
-                    # Determine expected file extension
-                    $expectedFileExtension = if ($isVideoDownload) { ".mp4" } else { ".mp3" }
+                    # Determine expected file extension based on download type
+                    $expectedFileExtension = switch ($selectedOption.Type) {
+                        "best" { ".mp4" }
+                        "combined" { "." + $selectedOption.Format.ext }
+                        "specific_video" { "." + $selectedOption.Format.ext }
+                        "mp3_conversion" { ".mp3" }
+                        "specific_audio" { ".mp3" }
+                        "original_audio" { "." + $selectedOption.Format.ext }
+                        default { if ($isVideoDownload) { ".mp4" } else { ".mp3" } }
+                    }
                     
                     Write-ErrorLog "Attempting to find downloaded file. Method 1: Based on videoInfo.title."
                     if ($videoInfo -and $videoInfo.title) {
@@ -2864,14 +3258,26 @@ do {
                     }
                     
                     if (-not $downloadedFileInTemp) {
-                        Write-ErrorLog "Method 2 failed. Attempting Method 3: Find any file with correct extension."
-                        # As a last resort, find any file with the expected extension
+                        Write-ErrorLog "Method 2 failed. Attempting Method 3: Find any file with quality prefix."
+                        # As a last resort, find any file with the quality prefix regardless of extension
                         if ($tempFilesList) {
+                            $qualityPrefixForSearch = Get-QualityPrefix -Type $selectedOption.Type -SelectedOption $selectedOption
                             foreach ($fileInTempDir in $tempFilesList) {
-                                if ($fileInTempDir.Name.EndsWith($expectedFileExtension)) {
+                                if ($fileInTempDir.Name.StartsWith($qualityPrefixForSearch)) {
                                     $downloadedFileInTemp = $fileInTempDir.FullName
-                                    Write-ErrorLog "Method 3: File found by extension matching: $downloadedFileInTemp"
+                                    Write-ErrorLog "Method 3: File found by prefix matching: $downloadedFileInTemp"
                                     break
+                                }
+                            }
+                            
+                            # If still not found, try by expected extension
+                            if (-not $downloadedFileInTemp) {
+                                foreach ($fileInTempDir in $tempFilesList) {
+                                    if ($fileInTempDir.Name.EndsWith($expectedFileExtension)) {
+                                        $downloadedFileInTemp = $fileInTempDir.FullName
+                                        Write-ErrorLog "Method 3: File found by extension matching: $downloadedFileInTemp"
+                                        break
+                                    }
                                 }
                             }
                         }
@@ -3023,7 +3429,13 @@ do {
                                 Write-Host "📁 Location: " -NoNewline -ForegroundColor Yellow
                                 Write-Host "$destinationPath" -ForegroundColor Cyan
                                 Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-                                Write-ErrorLog "Successfully moved $fileType '$downloadedFileInTemp' to '$destinationPath'."
+                                Write-ErrorLog "=== DOWNLOAD COMPLETED SUCCESSFULLY ==="
+                                Write-ErrorLog "File Type: $fileType"
+                                Write-ErrorLog "Downloaded file: $fileNameOnly"
+                                Write-ErrorLog "Final location: $destinationPath"
+                                Write-ErrorLog "Download type: $($selectedOption.Type)"
+                                Write-ErrorLog "Format ID: $($selectedOption.Format.format_id)"
+                                Write-ErrorLog "File size: $((Get-Item -LiteralPath $destinationPath).Length) bytes"
                             } else {
                                 $finalError = if ($moveError) { "Move failed: $moveError" } else { "File move appeared successful but destination file not found: $destinationPath" }
                                 throw $finalError
@@ -3183,6 +3595,7 @@ do {
             Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-Host ""
             $userResponseSameUrl = Get-ValidatedUserInput -Prompt "🔄 Download another format for THIS video? (y/n):" -InputType "yesno" -MaxAttempts 3
+            Write-ErrorLog "User response for another format: $userResponseSameUrl"
             if ($userResponseSameUrl -eq 'n' -or $null -eq $userResponseSameUrl) {
                 $downloadAnotherFormatForSameUrl = 'n' 
             }
@@ -3194,6 +3607,7 @@ do {
     Write-Host "─────────────────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
     $userContinueChoiceWithNewLink = Get-ValidatedUserInput -Prompt "🆕 Download from a NEW YouTube URL? (y/n):" -InputType "yesno" -MaxAttempts 3
+    Write-ErrorLog "User response for new URL: $userContinueChoiceWithNewLink"
     if ($userContinueChoiceWithNewLink -eq 'n' -or $null -eq $userContinueChoiceWithNewLink) {
         $continueWithNewLink = 'n' 
     }
@@ -3232,3 +3646,4 @@ Write-Host "╚═════════════════════�
 Write-Host ""
 
 Write-ErrorLog "Script session ended gracefully."
+Write-SessionEndLog
