@@ -25,7 +25,7 @@ try {
     
     # Define desired dimensions
     $desiredWidth = 120  # Reduced from 140 to be more compatible
-    $desiredHeight = 35  # Reduced from 45 to be more compatible
+    $desiredHeight = 55  # Reduced from 45 to be more compatible
     
     # Get maximum window size for current screen
     $maxWindowSize = $Host.UI.RawUI.MaxWindowSize
@@ -427,7 +427,6 @@ function Get-SystemProxy {
     try {
         $proxySettings = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue
         if ($proxySettings -and $proxySettings.ProxyEnable -eq 1 -and $proxySettings.ProxyServer) {
-            Write-Host "System proxy detected: $($proxySettings.ProxyServer)" -ForegroundColor Yellow
             Write-ErrorLog "System proxy detected: $($proxySettings.ProxyServer)"
             return $proxySettings.ProxyServer
         }
@@ -446,17 +445,17 @@ function Set-ProxyConfiguration {
     if ($systemProxy) {
         $env:HTTP_PROXY = "http://$systemProxy"
         $env:HTTPS_PROXY = "http://$systemProxy"
-        Write-Host "Using system proxy: $systemProxy" -ForegroundColor Green
         Write-ErrorLog "Proxy configuration set to system proxy: $systemProxy"
+        return "Using system proxy: $systemProxy"
     } elseif ([bool]$settings.proxy.custom_proxy_enabled -and $settings.proxy.custom_proxy_host -and $settings.proxy.custom_proxy_port) {
         $customProxy = "$($settings.proxy.custom_proxy_host):$($settings.proxy.custom_proxy_port)"
         $env:HTTP_PROXY = "http://$customProxy"
         $env:HTTPS_PROXY = "http://$customProxy"
-        Write-Host "Using custom proxy: $customProxy" -ForegroundColor Green
         Write-ErrorLog "Proxy configuration set to custom proxy: $customProxy"
+        return "Using custom proxy: $customProxy"
     } else {
-        Write-Host "No proxy configuration detected or enabled" -ForegroundColor Gray
         Write-ErrorLog "No proxy configuration applied"
+        return "No proxy configuration detected or enabled"
     }
 }
 
@@ -466,13 +465,14 @@ function Initialize-Database {
         try {
             $emptyDb = @{ videos = @() }
             $emptyDb | ConvertTo-Json -Depth 10 | Out-File -FilePath $dbPath -Encoding UTF8
-            Write-Host "Database initialized at $dbPath" -ForegroundColor Green
             Write-ErrorLog "Database initialized at $dbPath"
+            return "Database initialized at $dbPath"
         } catch {
             Write-Warning "Failed to initialize database: $($_.Exception.Message)"
             Write-ErrorLog "Failed to initialize database: $($_.Exception.Message)"
         }
     }
+    return $null
 }
 
 function Clear-VideoCache {
@@ -854,21 +854,31 @@ function Invoke-StartupTask {
     # Write initial task status
     Write-Host -NoNewline "  [ ] $Message"
     
-    # Execute the action and capture success/failure
-    $success = & $Action
+    # Execute the action and capture its output and success/failure
+    $actionOutput = & $Action
+    $success = $? # Check if the last command was successful
     
-    # Move cursor back to the start of the line
+    # Move cursor back to the start of the line and clear it
     $Host.UI.RawUI.CursorPosition = $cursorPos
-    
+    $clearLine = " " * ($Host.UI.RawUI.WindowSize.Width - 1)
+    Write-Host -NoNewline $clearLine
+    $Host.UI.RawUI.CursorPosition = $cursorPos
+
     # Write final status
     if ($success) {
-        Write-Host -NoNewline "  [✓] $Message" -ForegroundColor Green
+        Write-Host "  [✓] $Message" -ForegroundColor Green
     } else {
-        Write-Host -NoNewline "  [✗] $Message" -ForegroundColor Red
+        Write-Host "  [✗] $Message" -ForegroundColor Red
     }
     
-    # Move cursor to the next line for the next task
-    Write-Host ""
+    # If the action produced any output, display it on a new line, indented
+    if ($actionOutput) {
+        $outputString = $actionOutput | Out-String
+        if (-not [string]::IsNullOrWhiteSpace($outputString)) {
+            $indentedOutput = $outputString.Trim() -replace '(?m)^', '      '
+            Write-Host $indentedOutput -ForegroundColor Gray
+        }
+    }
 }
 
 function Update-YtDlp {
@@ -1563,7 +1573,7 @@ function Show-ScriptHelp {
     Write-Host "  🎵 AUDIO EXTRACTION" -ForegroundColor Cyan
     Write-Host "     • Extract audio from any video" -ForegroundColor White
     Write-Host "     • Convert to MP3 with custom bitrates (128/256/320 kbps)" -ForegroundColor White
-    Write-Host "     • Preserve original audio quality" -ForegroundColor White
+    Write-Host "     • Preserve original audio quality (e.g., opus, m4a)" -ForegroundColor White
     Write-Host ""
     Write-Host "  🖼️  THUMBNAIL DOWNLOADS" -ForegroundColor Cyan
     Write-Host "     • Download video thumbnails in highest quality" -ForegroundColor White
@@ -1571,29 +1581,35 @@ function Show-ScriptHelp {
     Write-Host ""
     Write-Host "  🚀 PERFORMANCE & RELIABILITY" -ForegroundColor Cyan
     Write-Host "     • Smart caching system for instant video info retrieval" -ForegroundColor White
-    Write-Host "     • Automatic retry on failures" -ForegroundColor White
+    Write-Host "     • Automatic retry on failures and intelligent error handling" -ForegroundColor White
     Write-Host "     • Beautiful progress display with speed and ETA" -ForegroundColor White
     Write-Host "     • Proxy support (system and custom)" -ForegroundColor White
-    Write-Host "     • Cookie authentication for private/age-restricted videos" -ForegroundColor White
+    Write-Host "     • Cookie and YouTube Login for private/age-restricted videos" -ForegroundColor White
     Write-Host ""
     
     Write-Host "📥 4. DOWNLOAD OPTIONS" -ForegroundColor Green
     Write-Host "──────────────────────" -ForegroundColor Gray
-    Write-Host "  When you enter a YouTube URL, you'll see:" -ForegroundColor White
+    Write-Host "  When you enter a YouTube URL, you'll see a detailed menu of options:" -ForegroundColor White
     Write-Host ""
     Write-Host "  1️⃣  BEST QUALITY (Recommended)" -ForegroundColor Yellow
-    Write-Host "     Automatically selects and merges best video + audio" -ForegroundColor Gray
+    Write-Host "     • Automatically selects the best available video and audio streams." -ForegroundColor Gray
+    Write-Host "     • Merges them into a single high-quality MP4 file." -ForegroundColor Gray
     Write-Host ""
     Write-Host "  2️⃣  SPECIFIC VIDEO FORMATS" -ForegroundColor Yellow
-    Write-Host "     Choose exact resolution and codec (H.264, VP9, AV1)" -ForegroundColor Gray
+    Write-Host "     • Choose from a list of video-only formats (like VP9, AV1)." -ForegroundColor Gray
+    Write-Host "     • These are automatically merged with the best available audio." -ForegroundColor Gray
+    Write-Host "     • Great for specific quality or file size needs." -ForegroundColor Gray
     Write-Host ""
     Write-Host "  3️⃣  AUDIO ONLY OPTIONS" -ForegroundColor Yellow
-    Write-Host "     • MP3 320kbps - Studio quality" -ForegroundColor Gray
-    Write-Host "     • MP3 256kbps - Premium quality" -ForegroundColor Gray
-    Write-Host "     • MP3 128kbps - Standard quality" -ForegroundColor Gray
+    Write-Host "     • MP3 Conversion: Convert audio to high-quality MP3 (320, 256, or 128 kbps)." -ForegroundColor Gray
+    Write-Host "     • Original Audio: Download audio in its original format (e.g., opus, m4a) without re-encoding, preserving source quality." -ForegroundColor Gray
     Write-Host ""
     Write-Host "  4️⃣  THUMBNAIL DOWNLOAD" -ForegroundColor Yellow
-    Write-Host "     Save the video's cover image" -ForegroundColor Gray
+    Write-Host "     • Save the video's full-resolution cover image as a JPG or WEBP file." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  5️⃣  PRE-COMBINED FORMATS (If available)" -ForegroundColor Yellow
+    Write-Host "     • Some older videos offer pre-combined video and audio files." -ForegroundColor Gray
+    Write-Host "     • These are usually lower quality but download faster as they don't require merging." -ForegroundColor Gray
     Write-Host ""
     
     Write-Host "⚙️  5. CONFIGURATION GUIDE" -ForegroundColor Green
@@ -1612,47 +1628,64 @@ function Show-ScriptHelp {
     
     Write-Host "🔧 6. TROUBLESHOOTING" -ForegroundColor Green
     Write-Host "─────────────────────" -ForegroundColor Gray
-    Write-Host "  ❌ Download fails?" -ForegroundColor Red
-    Write-Host "     • Check your internet connection" -ForegroundColor White
-    Write-Host "     • Try using cookies (configure with " -NoNewline -ForegroundColor White; Write-Host "'settings'" -NoNewline -ForegroundColor Cyan; Write-Host " command)" -ForegroundColor White
-    Write-Host "     • Enable proxy if behind firewall" -ForegroundColor White
-    Write-Host "     • Clear cache with " -NoNewline -ForegroundColor White; Write-Host "'clear-cache'" -NoNewline -ForegroundColor Cyan; Write-Host " command" -ForegroundColor White
+    Write-Host "  ❌ Download fails or '403 Forbidden' error?" -ForegroundColor Red
+    Write-Host "     • Check your internet connection." -ForegroundColor White
+    Write-Host "     • The video might be private or region-locked. Try a VPN." -ForegroundColor White
+    Write-Host "     • For age-restricted videos, you need to use cookies." -ForegroundColor White
+    Write-Host "     • Open settings file with 'settings' command and set 'use_cookies' to true." -ForegroundColor White
+    Write-Host "     • Use 'clear-cache' to refetch video info." -ForegroundColor White
     Write-Host ""
-    Write-Host "  🔒 Age-restricted or private video?" -ForegroundColor Red
-    Write-Host "     • Configure cookies.txt from your browser" -ForegroundColor White
-    Write-Host "     • Use YouTube login option when prompted" -ForegroundColor White
-    Write-Host "     • Edit settings with " -NoNewline -ForegroundColor White; Write-Host "'settings'" -NoNewline -ForegroundColor Cyan; Write-Host " command" -ForegroundColor White
+    Write-Host "  🔒 How to download age-restricted or private videos?" -ForegroundColor Red
+    Write-Host "     • The best method is using a cookies.txt file from your logged-in browser." -ForegroundColor White
+    Write-Host "     • The script may also prompt you to log in to YouTube. This will open a Chrome window for you to sign in." -ForegroundColor White
+    Write-Host "     • This method can help with some restricted content." -ForegroundColor White
     Write-Host ""
     Write-Host "  🐛 Other issues?" -ForegroundColor Red
-    Write-Host "     • Check debug.txt for detailed error logs" -ForegroundColor White
-    Write-Host "     • Use " -NoNewline -ForegroundColor White; Write-Host "'folder'" -NoNewline -ForegroundColor Cyan; Write-Host " command to access program files" -ForegroundColor White
-    Write-Host "     • Update yt-dlp and ffmpeg (automatic on start)" -ForegroundColor White
+    Write-Host "     • Check 'debug.txt' for detailed error logs. Use the 'folder' command to find it." -ForegroundColor White
+    Write-Host "     • The script automatically updates yt-dlp and ffmpeg on startup to prevent many common issues." -ForegroundColor White
+    Write-Host "     • If the program window closes immediately, run it from a PowerShell terminal to see the error message." -ForegroundColor White
     Write-Host ""
     
     Write-Host "📋 7. SETTINGS.JSON REFERENCE" -ForegroundColor Green
     Write-Host "─────────────────────────────" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  🔹 general:" -ForegroundColor Cyan
-    Write-Host "     • request_timeout_seconds : Network timeout (default: 20)" -ForegroundColor White
-    Write-Host "     • max_retries            : Retry attempts (default: 3)" -ForegroundColor White
-    Write-Host "     • use_database_cache     : Enable caching (default: true)" -ForegroundColor White
+    Write-Host "     • request_timeout_seconds : Network timeout for fetching video info (default: 20)" -ForegroundColor White
+    Write-Host "     • max_retries             : Retry attempts for failed network requests (default: 3)" -ForegroundColor White
+    Write-Host "     • show_processing_messages: Show messages like 'Processing...' (default: true)" -ForegroundColor White
+    Write-Host "     • use_database_cache      : Enable local caching of video info for speed (default: true)" -ForegroundColor White
+    Write-Host "     • database_file           : Name of the video cache file (default: 'video_cache.json')" -ForegroundColor White
     Write-Host ""
     Write-Host "  🔹 proxy:" -ForegroundColor Cyan
-    Write-Host "     • use_system_proxy   : Use Windows proxy (default: true)" -ForegroundColor White
-    Write-Host "     • custom_proxy_host  : Custom proxy IP" -ForegroundColor White
-    Write-Host "     • custom_proxy_port  : Custom proxy port" -ForegroundColor White
+    Write-Host "     • use_system_proxy        : Automatically use Windows proxy settings (default: true)" -ForegroundColor White
+    Write-Host "     • custom_proxy_enabled    : Enable custom proxy settings below (default: false)" -ForegroundColor White
+    Write-Host "     • custom_proxy_host       : Custom proxy IP or address" -ForegroundColor White
+    Write-Host "     • custom_proxy_port       : Custom proxy port" -ForegroundColor White
+    Write-Host "     • custom_proxy_username   : Username for proxy (if needed)" -ForegroundColor White
+    Write-Host "     • custom_proxy_password   : Password for proxy (if needed)" -ForegroundColor White
     Write-Host ""
     Write-Host "  🔹 cookies:" -ForegroundColor Cyan
-    Write-Host "     • use_cookies       : Enable cookie auth (default: true)" -ForegroundColor White
-    Write-Host "     • cookie_file_path  : Cookie file name (default: cookies.txt)" -ForegroundColor White
+    Write-Host "     • use_cookies             : Enable cookie authentication for private/restricted videos (default: false)" -ForegroundColor White
+    Write-Host "     • cookie_file_path        : Name of the cookie file (e.g., cookies.txt) (default: 'cookies.txt')" -ForegroundColor White
+    Write-Host "     • cookie_file_directory   : Directory where cookie file is located (leave blank for script directory)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  🔹 youtube_login:" -ForegroundColor Cyan
+    Write-Host "     • enable_auto_login       : Enable the interactive YouTube login feature via Chrome (default: true)" -ForegroundColor White
+    Write-Host "     • chrome_profile_path     : Path to a custom Chrome profile for persistent logins" -ForegroundColor White
+    Write-Host "     • login_timeout_seconds   : Time to wait for user to log in (default: 60)" -ForegroundColor White
     Write-Host ""
     Write-Host "  🔹 download:" -ForegroundColor Cyan
-    Write-Host "     • temp_directory    : Temporary files location" -ForegroundColor White
-    Write-Host "     • output_directory  : Final download location" -ForegroundColor White
+    Write-Host "     • temp_directory          : Folder for temporary download files (default: 'Temp')" -ForegroundColor White
+    Write-Host "     • output_directory        : Main folder for all finished downloads (default: 'Downloaded')" -ForegroundColor White
+    Write-Host "     • video_subdirectory      : Subfolder for downloaded videos (default: 'Video')" -ForegroundColor White
+    Write-Host "     • audio_subdirectory      : Subfolder for downloaded audio (default: 'Audio')" -ForegroundColor White
+    Write-Host "     • covers_subdirectory     : Subfolder for downloaded thumbnails (default: 'Covers')" -ForegroundColor White
     Write-Host ""
     Write-Host "  🔹 advanced:" -ForegroundColor Cyan
-    Write-Host "     • enable_debug_logging : Save detailed logs (default: true)" -ForegroundColor White
-    Write-Host "     • cleanup_temp_files   : Auto-clean temp files (default: true)" -ForegroundColor White
+    Write-Host "     • enable_debug_logging    : Save detailed logs to debug.txt (default: false)" -ForegroundColor White
+    Write-Host "     • log_file_path           : Name of the debug log file (default: 'debug.txt')" -ForegroundColor White
+    Write-Host "     • cleanup_temp_files      : Automatically delete temporary files after download (default: true)" -ForegroundColor White
+    Write-Host "     • max_description_lines   : Number of video description lines to show (default: 5)" -ForegroundColor White
     Write-Host ""
     Write-Host "╔═══════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "║                         Press any key to continue...                          ║" -ForegroundColor Cyan
