@@ -13,21 +13,6 @@
   ![Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
 </div>
 
----
-
-## ✨ Key Features
-
-- **🧠 Intelligent Error Management**: Handles 15+ error types with specific, user-friendly solutions.
-- **✅ Smart Input Validation**: Prevents common user mistakes before downloads begin.
-- **⚡ Lightning-Fast Caching**: Instantly retrieves video info on repeated downloads, saving time.
-- **🔐 Advanced Authentication**: Full cookie support for downloading private and age-restricted content.
-- **🌐 Enterprise Proxy Support**: Seamlessly works behind corporate firewalls.
-- **🎯 Format Perfection**: Supports all modern resolutions and codecs, from 144p to 8K, HDR, and AV1.
-- **🛡️ Bulletproof Downloads**: Multiple fallback mechanisms and automatic retries ensure success.
-- **🚀 Smart Updater & Launcher**: The `syd.bat` file automatically handles updates, creates a desktop shortcut, and organizes files for you.
-
----
-
 ## 🚀 Getting Started
 
 This guide will get you up and running in minutes.
