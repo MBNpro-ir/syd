@@ -90,19 +90,19 @@ All advanced settings are managed in the `SYD` folder, which is created automati
 
 ### File Structure Overview
 ```
-📁 Your Project Folder/
+📁 Your User Folder on c:/Users/(Your windows username account)/
 ├── 📄 syd.bat                    # Main launcher file, safe to move
 ├── 📁 SYD/                       # Auto-created folder for all SYD files
 │   ├── 📄 syd_latest.ps1         # The core PowerShell script
 │   ├── 📄 settings.json          # All user configurations
 │   ├── 📄 cookies.txt            # Place your exported cookies here
 │   ├── 📄 video_cache.json       # Caches video metadata for speed
-│   └── 📄 logo.ico               # Icon for the desktop shortcut
-├── 📁 Downloaded/                # Your downloaded content
-│   ├── 📁 Video/
-│   ├── 📁 Audio/
-│   └── 📁 Covers/
-└── 📁 Temp/                      # Temporary files, cleaned automatically
+│   ├── 📄 logo.ico               # Icon for the desktop shortcut
+│   ├── 📁 Temp/                      # Temporary files, cleaned automatically
+│   ├── 📁 Downloaded/                # Your downloaded content
+│        ├── 📁 Video/
+│        ├── 📁 Audio/
+│        └── 📁 Covers/
 ```
 
 ### Configuring `settings.json`
