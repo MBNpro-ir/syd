@@ -96,6 +96,7 @@ All advanced settings are managed in the `SYD` folder, which is created automati
 │   ├── 📄 syd_latest.ps1         # The core PowerShell script
 │   ├── 📄 settings.json          # All user configurations
 │   ├── 📄 cookies.txt            # Place your exported cookies here
+│   ├── 📄 version_cache.txt      # The config file that can check updates
 │   ├── 📄 video_cache.json       # Caches video metadata for speed
 │   ├── 📄 logo.ico               # Icon for the desktop shortcut
 │   ├── 📁 Temp/                      # Temporary files, cleaned automatically
