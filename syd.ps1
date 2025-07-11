@@ -2701,7 +2701,7 @@ Write-Host "║                      YouTube Downloader Pro by MBNPRO           
 Write-Host "║                                                                               ║" -ForegroundColor Cyan
 Write-Host "║            The Ultimate YouTube Video, Audio & Thumbnail Downloader           ║" -ForegroundColor White
 Write-Host "║                                                                               ║" -ForegroundColor Cyan
-Write-Host "║                        Version 2.0 - Enhanced Edition                         ║" -ForegroundColor Gray
+Write-Host "║                        Version 2.8 - Enhanced Edition                         ║" -ForegroundColor Gray
 Write-Host "║                                                                               ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
