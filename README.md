@@ -13,21 +13,6 @@
   ![Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
 </div>
 
----
-
-## ✨ Key Features
-
-- **🧠 Intelligent Error Management**: Handles 15+ error types with specific, user-friendly solutions.
-- **✅ Smart Input Validation**: Prevents common user mistakes before downloads begin.
-- **⚡ Lightning-Fast Caching**: Instantly retrieves video info on repeated downloads, saving time.
-- **🔐 Advanced Authentication**: Full cookie support for downloading private and age-restricted content.
-- **🌐 Enterprise Proxy Support**: Seamlessly works behind corporate firewalls.
-- **🎯 Format Perfection**: Supports all modern resolutions and codecs, from 144p to 8K, HDR, and AV1.
-- **🛡️ Bulletproof Downloads**: Multiple fallback mechanisms and automatic retries ensure success.
-- **🚀 Smart Updater & Launcher**: The `syd.bat` file automatically handles updates, creates a desktop shortcut, and organizes files for you.
-
----
-
 ## 🚀 Getting Started
 
 This guide will get you up and running in minutes.
@@ -105,19 +90,20 @@ All advanced settings are managed in the `SYD` folder, which is created automati
 
 ### File Structure Overview
 ```
-📁 Your Project Folder/
+📁 Your User Folder on c:/Users/(Your windows username account)/
 ├── 📄 syd.bat                    # Main launcher file, safe to move
 ├── 📁 SYD/                       # Auto-created folder for all SYD files
 │   ├── 📄 syd_latest.ps1         # The core PowerShell script
 │   ├── 📄 settings.json          # All user configurations
 │   ├── 📄 cookies.txt            # Place your exported cookies here
+│   ├── 📄 version_cache.txt      # The config file that can check updates
 │   ├── 📄 video_cache.json       # Caches video metadata for speed
-│   └── 📄 logo.ico               # Icon for the desktop shortcut
-├── 📁 Downloaded/                # Your downloaded content
-│   ├── 📁 Video/
-│   ├── 📁 Audio/
-│   └── 📁 Covers/
-└── 📁 Temp/                      # Temporary files, cleaned automatically
+│   ├── 📄 logo.ico               # Icon for the desktop shortcut
+│   ├── 📁 Temp/                      # Temporary files, cleaned automatically
+│   ├── 📁 Downloaded/                # Your downloaded content
+│        ├── 📁 Video/
+│        ├── 📁 Audio/
+│        └── 📁 Covers/
 ```
 
 ### Configuring `settings.json`
