@@ -1229,6 +1229,17 @@ function New-DownloadArguments {
     $args.Add("-o"); $args.Add($OutputTemplate)
     $args.Add("-f"); $args.Add($Format)
     
+    # Enhanced metadata extraction and embedding
+    # Note: We skip --write-info-json and --write-description to keep download folder clean
+    # Metadata is embedded directly into the media files
+    
+    # Parse additional metadata fields for better tagging
+    $args.Add("--parse-metadata"); $args.Add("%(title)s:%(meta_title)s")
+    $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(meta_artist)s")
+    $args.Add("--parse-metadata"); $args.Add("%(upload_date)s:%(meta_date)s")
+    $args.Add("--parse-metadata"); $args.Add("%(description)s:%(meta_comment)s")
+    $args.Add("--parse-metadata"); $args.Add("%(duration)s:%(meta_length)s")
+    
     switch ($Type) {
         "video" {
             $args.Add("--merge-output-format"); $args.Add("mp4")
@@ -1236,6 +1247,9 @@ function New-DownloadArguments {
             $args.Add("--sub-lang"); $args.Add("fa,en")
             $args.Add("--embed-subs")
             $args.Add("--convert-subs"); $args.Add("srt")
+            # Add metadata embedding for video files
+            $args.Add("--embed-metadata")
+            $args.Add("--add-metadata")
         }
         "original_video" {
             # Keep original format without conversion but merge with audio
@@ -1244,6 +1258,9 @@ function New-DownloadArguments {
             $args.Add("--embed-subs")
             $args.Add("--convert-subs"); $args.Add("srt")
             # No merge-output-format to preserve original container
+            # Add metadata embedding for video files
+            $args.Add("--embed-metadata")
+            $args.Add("--add-metadata")
         }
         "force_mp4" {
             # Force MP4 container for specific formats
@@ -1252,6 +1269,9 @@ function New-DownloadArguments {
             $args.Add("--sub-lang"); $args.Add("fa,en")
             $args.Add("--embed-subs")
             $args.Add("--convert-subs"); $args.Add("srt")
+            # Add metadata embedding for MP4 video files
+            $args.Add("--embed-metadata")
+            $args.Add("--add-metadata")
         }
         "audio" {
             $args.Add("--extract-audio")
@@ -1259,20 +1279,58 @@ function New-DownloadArguments {
             if ($Bitrate -gt 0) {
                 $args.Add("--audio-quality"); $args.Add("$($Bitrate)K")
             }
+            # Add metadata and thumbnail embedding for MP3 files
+            $args.Add("--embed-metadata")
+            $args.Add("--embed-thumbnail")
+            $args.Add("--add-metadata")
+            
+            # Enhanced metadata for audio files
+            $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(artist)s")
+            $args.Add("--parse-metadata"); $args.Add("%(title)s:%(track)s")
+            $args.Add("--parse-metadata"); $args.Add("%(playlist)s:%(album)s")
+            $args.Add("--parse-metadata"); $args.Add("%(upload_date>%Y)s:%(date)s")
+            $args.Add("--parse-metadata"); $args.Add("%(description)s:%(comment)s")
+            $args.Add("--parse-metadata"); $args.Add("Music:%(genre)s")
         }
         "audio_specific" {
             $args.Add("--extract-audio")
             $args.Add("--audio-format"); $args.Add("mp3")
+            # Add metadata and thumbnail embedding for MP3 files
+            $args.Add("--embed-metadata")
+            $args.Add("--embed-thumbnail")
+            $args.Add("--add-metadata")
+            
+            # Enhanced metadata for audio files
+            $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(artist)s")
+            $args.Add("--parse-metadata"); $args.Add("%(title)s:%(track)s")
+            $args.Add("--parse-metadata"); $args.Add("%(playlist)s:%(album)s")
+            $args.Add("--parse-metadata"); $args.Add("%(upload_date>%Y)s:%(date)s")
+            $args.Add("--parse-metadata"); $args.Add("%(description)s:%(comment)s")
+            $args.Add("--parse-metadata"); $args.Add("Music:%(genre)s")
         }
 
         "original_no_conversion" {
             # Keep original format without any conversion
-            # No additional arguments needed - downloads as-is
+            # Add metadata embedding for original formats
+            $args.Add("--embed-metadata")
+            $args.Add("--add-metadata")
         }
         "original_audio" {
             # Extract audio in original format without conversion
             $args.Add("--extract-audio")
             # No --audio-format specified to keep original format
+            # Add metadata and thumbnail embedding (if supported by format)
+            $args.Add("--embed-metadata")
+            $args.Add("--embed-thumbnail")
+            $args.Add("--add-metadata")
+            
+            # Enhanced metadata for audio files
+            $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(artist)s")
+            $args.Add("--parse-metadata"); $args.Add("%(title)s:%(track)s")
+            $args.Add("--parse-metadata"); $args.Add("%(playlist)s:%(album)s")
+            $args.Add("--parse-metadata"); $args.Add("%(upload_date>%Y)s:%(date)s")
+            $args.Add("--parse-metadata"); $args.Add("%(description)s:%(comment)s")
+            $args.Add("--parse-metadata"); $args.Add("Music:%(genre)s")
         }
     }
     
