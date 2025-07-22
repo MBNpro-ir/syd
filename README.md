@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🚀 SYD - Simple YouTube Downloader by MBNPRO 🚀</h1>
+  <h1>🚀 SYD - Simple YouTube Downloader by MBN 🚀</h1>
   <p>
     <strong>The Ultimate PowerShell YouTube Downloader with Advanced Error Handling & Smart Features</strong>
   </p>
