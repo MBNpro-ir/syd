@@ -316,6 +316,7 @@ function Load-Settings {
                 cookies = if ($fileSettings.cookies) { $fileSettings.cookies } else { $defaultSettings.cookies }
                 youtube_login = if ($fileSettings.youtube_login) { $fileSettings.youtube_login } else { $defaultSettings.youtube_login }
                 download = if ($fileSettings.download) { $fileSettings.download } else { $defaultSettings.download }
+                optimization = if ($fileSettings.optimization) { $fileSettings.optimization } else { $defaultSettings.optimization }
                 advanced = if ($fileSettings.advanced) { $fileSettings.advanced } else { $defaultSettings.advanced }
             }
             
@@ -387,6 +388,18 @@ function Get-DefaultSettings {
             audio_subdirectory = "Audio"
             covers_subdirectory = "Covers"
         }
+        optimization = @{
+            concurrent_fragments = 4
+            fragment_retries = 10
+            retry_sleep = 5
+            socket_timeout = 30
+            sleep_requests = 0
+            sleep_interval = 0
+            max_sleep_interval = 0
+            use_aria2c_downloader = $false
+            rate_limit = ""
+            enable_optimization = $true
+        }
         advanced = @{
             enable_debug_logging = $false
             log_file_path = "debug.txt"
@@ -409,6 +422,7 @@ function Create-SettingsFile {
             cookies = $defaultSettings.cookies
             youtube_login = $defaultSettings.youtube_login
             download = $defaultSettings.download
+            optimization = $defaultSettings.optimization
             advanced = $defaultSettings.advanced
         }
         
@@ -1139,7 +1153,11 @@ function Get-QualityPrefix {
     
     switch ($Type) {
         "best" {
-            return "[Best]"
+            if ($SelectedOption -and $SelectedOption.TotalBitrate) {
+                return "[Best-$($SelectedOption.TotalBitrate)k]"
+            } else {
+                return "[Best]"
+            }
         }
         "combined" {
             $format = $SelectedOption.Format
@@ -1205,13 +1223,73 @@ function New-DownloadArguments {
         [string]$CookieFilePath = ""
     )
     
-    $args = New-Object System.Collections.Generic.List[string]
-    $args.Add("--no-warnings")
-    Add-EnhancedHeaders -ArgumentsList $args
+    $argsList = New-Object System.Collections.Generic.List[string]
+    $argsList.Add("--no-warnings")
+    Add-EnhancedHeaders -ArgumentsList $argsList
+    
+    # Add optimization settings if enabled
+    if ([bool]$settings.optimization.enable_optimization) {
+        Write-ErrorLog "Applying optimization settings for improved speed and reliability"
+        
+        # Concurrent fragments for faster downloads
+        if ($settings.optimization.concurrent_fragments -gt 0) {
+            $argsList.Add("--concurrent-fragments"); $argsList.Add($settings.optimization.concurrent_fragments.ToString())
+            Write-ErrorLog "Concurrent fragments set to: $($settings.optimization.concurrent_fragments)"
+        }
+        
+        # Fragment retry settings
+        if ($settings.optimization.fragment_retries -gt 0) {
+            $argsList.Add("--fragment-retries"); $argsList.Add($settings.optimization.fragment_retries.ToString())
+            Write-ErrorLog "Fragment retries set to: $($settings.optimization.fragment_retries)"
+        }
+        
+        # Retry sleep settings
+        if ($settings.optimization.retry_sleep -gt 0) {
+            $argsList.Add("--retry-sleep"); $argsList.Add($settings.optimization.retry_sleep.ToString())
+            Write-ErrorLog "Retry sleep set to: $($settings.optimization.retry_sleep) seconds"
+        }
+        
+        # Socket timeout
+        if ($settings.optimization.socket_timeout -gt 0) {
+            $argsList.Add("--socket-timeout"); $argsList.Add($settings.optimization.socket_timeout.ToString())
+            Write-ErrorLog "Socket timeout set to: $($settings.optimization.socket_timeout) seconds"
+        }
+        
+        # Sleep between requests to avoid rate limiting
+        if ($settings.optimization.sleep_requests -gt 0) {
+            $argsList.Add("--sleep-requests"); $argsList.Add($settings.optimization.sleep_requests.ToString())
+            Write-ErrorLog "Sleep between requests set to: $($settings.optimization.sleep_requests) seconds"
+        }
+        
+        # Sleep interval settings for random delays
+        if ($settings.optimization.sleep_interval -gt 0) {
+            $argsList.Add("--sleep-interval"); $argsList.Add($settings.optimization.sleep_interval.ToString())
+            Write-ErrorLog "Sleep interval set to: $($settings.optimization.sleep_interval) seconds"
+        }
+        
+        if ($settings.optimization.max_sleep_interval -gt 0 -and $settings.optimization.max_sleep_interval -gt $settings.optimization.sleep_interval) {
+            $argsList.Add("--max-sleep-interval"); $argsList.Add($settings.optimization.max_sleep_interval.ToString())
+            Write-ErrorLog "Max sleep interval set to: $($settings.optimization.max_sleep_interval) seconds"
+        }
+        
+        # Rate limiting to avoid throttling
+        if (![string]::IsNullOrWhiteSpace($settings.optimization.rate_limit)) {
+            $argsList.Add("--limit-rate"); $argsList.Add($settings.optimization.rate_limit)
+            Write-ErrorLog "Rate limit set to: $($settings.optimization.rate_limit)"
+        }
+        
+        # Use aria2c downloader for faster downloads
+        if ([bool]$settings.optimization.use_aria2c_downloader) {
+            $argsList.Add("--downloader"); $argsList.Add("aria2c")
+            Write-ErrorLog "Using aria2c downloader for improved speed"
+        }
+    } else {
+        Write-ErrorLog "Optimization settings are disabled"
+    }
     
     # Add proxy if configured
     if ($env:HTTP_PROXY) {
-        $args.Add("--proxy"); $args.Add($env:HTTP_PROXY)
+        $argsList.Add("--proxy"); $argsList.Add($env:HTTP_PROXY)
         Write-ErrorLog "Download proxy added: $($env:HTTP_PROXY)"
     } else {
         Write-ErrorLog "No proxy configured for download"
@@ -1219,123 +1297,123 @@ function New-DownloadArguments {
     
     # Add cookies if available
     if ($UseCookies -and $CookieFilePath -and (Test-Path $CookieFilePath)) {
-        $args.Add("--cookies"); $args.Add($CookieFilePath)
+        $argsList.Add("--cookies"); $argsList.Add($CookieFilePath)
         Write-ErrorLog "Download cookies added: $CookieFilePath"
     } else {
         Write-ErrorLog "No cookies configured for download - UseCookies: $UseCookies, CookieFilePath: $CookieFilePath, FileExists: $(if ($CookieFilePath) { Test-Path $CookieFilePath } else { 'N/A' })"
     }
     
-    $args.Add("--ffmpeg-location"); $args.Add($FfmpegPath)
-    $args.Add("-o"); $args.Add($OutputTemplate)
-    $args.Add("-f"); $args.Add($Format)
+    $argsList.Add("--ffmpeg-location"); $argsList.Add($FfmpegPath)
+    $argsList.Add("-o"); $argsList.Add($OutputTemplate)
+    $argsList.Add("-f"); $argsList.Add($Format)
     
     # Enhanced metadata extraction and embedding
     # Note: We skip --write-info-json and --write-description to keep download folder clean
     # Metadata is embedded directly into the media files
     
     # Parse additional metadata fields for better tagging
-    $args.Add("--parse-metadata"); $args.Add("%(title)s:%(meta_title)s")
-    $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(meta_artist)s")
-    $args.Add("--parse-metadata"); $args.Add("%(upload_date)s:%(meta_date)s")
-    $args.Add("--parse-metadata"); $args.Add("%(description)s:%(meta_comment)s")
-    $args.Add("--parse-metadata"); $args.Add("%(duration)s:%(meta_length)s")
+    $argsList.Add("--parse-metadata"); $argsList.Add("%(title)s:%(meta_title)s")
+    $argsList.Add("--parse-metadata"); $argsList.Add("%(uploader)s:%(meta_artist)s")
+    $argsList.Add("--parse-metadata"); $argsList.Add("%(upload_date)s:%(meta_date)s")
+    $argsList.Add("--parse-metadata"); $argsList.Add("%(description)s:%(meta_comment)s")
+    $argsList.Add("--parse-metadata"); $argsList.Add("%(duration)s:%(meta_length)s")
     
     switch ($Type) {
         "video" {
-            $args.Add("--merge-output-format"); $args.Add("mp4")
-            $args.Add("--write-subs")
-            $args.Add("--sub-lang"); $args.Add("fa,en")
-            $args.Add("--embed-subs")
-            $args.Add("--convert-subs"); $args.Add("srt")
+            $argsList.Add("--merge-output-format"); $argsList.Add("mp4")
+            $argsList.Add("--write-subs")
+            $argsList.Add("--sub-lang"); $argsList.Add("fa,en")
+            $argsList.Add("--embed-subs")
+            $argsList.Add("--convert-subs"); $argsList.Add("srt")
             # Add metadata embedding for video files
-            $args.Add("--embed-metadata")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--add-metadata")
         }
         "original_video" {
             # Keep original format without conversion but merge with audio
-            $args.Add("--write-subs")
-            $args.Add("--sub-lang"); $args.Add("fa,en")
-            $args.Add("--embed-subs")
-            $args.Add("--convert-subs"); $args.Add("srt")
+            $argsList.Add("--write-subs")
+            $argsList.Add("--sub-lang"); $argsList.Add("fa,en")
+            $argsList.Add("--embed-subs")
+            $argsList.Add("--convert-subs"); $argsList.Add("srt")
             # No merge-output-format to preserve original container
             # Add metadata embedding for video files
-            $args.Add("--embed-metadata")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--add-metadata")
         }
         "force_mp4" {
             # Force MP4 container for specific formats
-            $args.Add("--merge-output-format"); $args.Add("mp4")
-            $args.Add("--write-subs")
-            $args.Add("--sub-lang"); $args.Add("fa,en")
-            $args.Add("--embed-subs")
-            $args.Add("--convert-subs"); $args.Add("srt")
+            $argsList.Add("--merge-output-format"); $argsList.Add("mp4")
+            $argsList.Add("--write-subs")
+            $argsList.Add("--sub-lang"); $argsList.Add("fa,en")
+            $argsList.Add("--embed-subs")
+            $argsList.Add("--convert-subs"); $argsList.Add("srt")
             # Add metadata embedding for MP4 video files
-            $args.Add("--embed-metadata")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--add-metadata")
         }
         "audio" {
-            $args.Add("--extract-audio")
-            $args.Add("--audio-format"); $args.Add("mp3")
+            $argsList.Add("--extract-audio")
+            $argsList.Add("--audio-format"); $argsList.Add("mp3")
             if ($Bitrate -gt 0) {
-                $args.Add("--audio-quality"); $args.Add("$($Bitrate)K")
+                $argsList.Add("--audio-quality"); $argsList.Add("$($Bitrate)K")
             }
             # Add metadata and thumbnail embedding for MP3 files
-            $args.Add("--embed-metadata")
-            $args.Add("--embed-thumbnail")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--embed-thumbnail")
+            $argsList.Add("--add-metadata")
             
             # Enhanced metadata for audio files
-            $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(artist)s")
-            $args.Add("--parse-metadata"); $args.Add("%(title)s:%(track)s")
-            $args.Add("--parse-metadata"); $args.Add("%(playlist)s:%(album)s")
-            $args.Add("--parse-metadata"); $args.Add("%(upload_date>%Y)s:%(date)s")
-            $args.Add("--parse-metadata"); $args.Add("%(description)s:%(comment)s")
-            $args.Add("--parse-metadata"); $args.Add("Music:%(genre)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(uploader)s:%(artist)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(title)s:%(track)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(playlist)s:%(album)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(upload_date>%Y)s:%(date)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(description)s:%(comment)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("Music:%(genre)s")
         }
         "audio_specific" {
-            $args.Add("--extract-audio")
-            $args.Add("--audio-format"); $args.Add("mp3")
+            $argsList.Add("--extract-audio")
+            $argsList.Add("--audio-format"); $argsList.Add("mp3")
             # Add metadata and thumbnail embedding for MP3 files
-            $args.Add("--embed-metadata")
-            $args.Add("--embed-thumbnail")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--embed-thumbnail")
+            $argsList.Add("--add-metadata")
             
             # Enhanced metadata for audio files
-            $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(artist)s")
-            $args.Add("--parse-metadata"); $args.Add("%(title)s:%(track)s")
-            $args.Add("--parse-metadata"); $args.Add("%(playlist)s:%(album)s")
-            $args.Add("--parse-metadata"); $args.Add("%(upload_date>%Y)s:%(date)s")
-            $args.Add("--parse-metadata"); $args.Add("%(description)s:%(comment)s")
-            $args.Add("--parse-metadata"); $args.Add("Music:%(genre)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(uploader)s:%(artist)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(title)s:%(track)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(playlist)s:%(album)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(upload_date>%Y)s:%(date)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(description)s:%(comment)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("Music:%(genre)s")
         }
 
         "original_no_conversion" {
             # Keep original format without any conversion
             # Add metadata embedding for original formats
-            $args.Add("--embed-metadata")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--add-metadata")
         }
         "original_audio" {
             # Extract audio in original format without conversion
-            $args.Add("--extract-audio")
+            $argsList.Add("--extract-audio")
             # No --audio-format specified to keep original format
             # Add metadata and thumbnail embedding (if supported by format)
-            $args.Add("--embed-metadata")
-            $args.Add("--embed-thumbnail")
-            $args.Add("--add-metadata")
+            $argsList.Add("--embed-metadata")
+            $argsList.Add("--embed-thumbnail")
+            $argsList.Add("--add-metadata")
             
             # Enhanced metadata for audio files
-            $args.Add("--parse-metadata"); $args.Add("%(uploader)s:%(artist)s")
-            $args.Add("--parse-metadata"); $args.Add("%(title)s:%(track)s")
-            $args.Add("--parse-metadata"); $args.Add("%(playlist)s:%(album)s")
-            $args.Add("--parse-metadata"); $args.Add("%(upload_date>%Y)s:%(date)s")
-            $args.Add("--parse-metadata"); $args.Add("%(description)s:%(comment)s")
-            $args.Add("--parse-metadata"); $args.Add("Music:%(genre)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(uploader)s:%(artist)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(title)s:%(track)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(playlist)s:%(album)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(upload_date>%Y)s:%(date)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("%(description)s:%(comment)s")
+            $argsList.Add("--parse-metadata"); $argsList.Add("Music:%(genre)s")
         }
     }
     
-    $args.Add($Url)
-    return $args
+    $argsList.Add($Url)
+    return $argsList
 }
 
 function Get-VideoInfoWithTimeout {
@@ -1361,7 +1439,7 @@ function Get-VideoInfoWithTimeout {
     $job = Start-Job -ScriptBlock {
         param($url, $ytDlpPath, $useCookies, $cookieFilePath, $proxyUrl)
         
-        $args = @(
+        $argumentList = @(
             "--dump-json", 
             "--no-warnings", 
             "--no-check-certificate",
@@ -1373,8 +1451,8 @@ function Get-VideoInfoWithTimeout {
         
         # Add proxy if configured (now passed explicitly)
         if ($proxyUrl) {
-            $args += "--proxy"
-            $args += $proxyUrl
+            $argumentList += "--proxy"
+            $argumentList += $proxyUrl
             # Return proxy info for parent script logging
             "PROXY_USED:$proxyUrl" | Out-Host
         } else {
@@ -1382,17 +1460,17 @@ function Get-VideoInfoWithTimeout {
         }
         
         if ($useCookies -and $cookieFilePath -and (Test-Path $cookieFilePath)) {
-            $args += "--cookies"
-            $args += $cookieFilePath
+            $argumentList += "--cookies"
+            $argumentList += $cookieFilePath
         }
-        $args += $url
+        $argumentList += $url
         
         # Debug logging for troubleshooting
         # Note: This runs in a job, so we can't use Write-ErrorLog here
         # But we can return debug info that will be logged in the main script
         
         try {
-            $output = & $ytDlpPath @args 2>&1
+            $output = & $ytDlpPath @argumentList 2>&1
             $exitCode = $LASTEXITCODE
             
             if ($exitCode -eq 0) {
@@ -1762,6 +1840,18 @@ function Show-ScriptHelp {
     Write-Host "     • audio_subdirectory      : Subfolder for downloaded audio (default: 'Audio')" -ForegroundColor White
     Write-Host "     • covers_subdirectory     : Subfolder for downloaded thumbnails (default: 'Covers')" -ForegroundColor White
     Write-Host ""
+    Write-Host "  🔹 optimization:" -ForegroundColor Cyan
+    Write-Host "     • enable_optimization     : Enable/disable all optimization features (default: true)" -ForegroundColor White
+    Write-Host "     • concurrent_fragments    : Number of fragments to download simultaneously (default: 4)" -ForegroundColor White
+    Write-Host "     • fragment_retries        : Retry attempts for failed fragments (default: 10)" -ForegroundColor White
+    Write-Host "     • retry_sleep             : Sleep time between retries in seconds (default: 5)" -ForegroundColor White
+    Write-Host "     • socket_timeout          : Network socket timeout in seconds (default: 30)" -ForegroundColor White
+    Write-Host "     • sleep_requests          : Sleep between requests to avoid rate limiting (default: 0)" -ForegroundColor White
+    Write-Host "     • sleep_interval          : Random sleep interval minimum (default: 0)" -ForegroundColor White
+    Write-Host "     • max_sleep_interval      : Random sleep interval maximum (default: 0)" -ForegroundColor White
+    Write-Host "     • use_aria2c_downloader   : Use aria2c for faster downloads (default: false)" -ForegroundColor White
+    Write-Host "     • rate_limit              : Download speed limit (e.g., '1M', '500K') (default: '')" -ForegroundColor White
+    Write-Host ""
     Write-Host "  🔹 advanced:" -ForegroundColor Cyan
     Write-Host "     • enable_debug_logging    : Save detailed logs to debug.txt (default: false)" -ForegroundColor White
     Write-Host "     • log_file_path           : Name of the debug log file (default: 'debug.txt')" -ForegroundColor White
@@ -1875,6 +1965,124 @@ function Format-Bytes {
         $order++
     }
     return "{0:N2} {1}" -f $bytesDouble, $suffixes[$order]
+}
+
+function Get-HighestBitrateFormat {
+    param (
+        [Parameter(Mandatory=$true)]
+        [array]$Formats
+    )
+    
+    Write-ErrorLog "Finding highest bitrate format from $($Formats.Count) available formats"
+    
+    # Separate formats by type
+    $videoFormats = @()
+    $audioFormats = @()
+    $combinedFormats = @()
+    
+    foreach ($format in $Formats) {
+        if ($format.vcodec -ne 'none' -and $format.acodec -ne 'none') {
+            $combinedFormats += $format
+        } elseif ($format.vcodec -ne 'none') {
+            $videoFormats += $format
+        } elseif ($format.acodec -ne 'none') {
+            $audioFormats += $format
+        }
+    }
+    
+    # Find highest bitrate video format
+    $bestVideoFormat = $null
+    $highestVideoBitrate = 0
+    
+    foreach ($format in $videoFormats) {
+        $bitrate = 0
+        if ($format.tbr) {
+            $bitrate = [double]$format.tbr
+        } elseif ($format.vbr) {
+            $bitrate = [double]$format.vbr
+        }
+        
+        if ($bitrate -gt $highestVideoBitrate) {
+            $highestVideoBitrate = $bitrate
+            $bestVideoFormat = $format
+        }
+    }
+    
+    # Find highest bitrate audio format
+    $bestAudioFormat = $null
+    $highestAudioBitrate = 0
+    
+    foreach ($format in $audioFormats) {
+        $bitrate = 0
+        if ($format.abr) {
+            $bitrate = [double]$format.abr
+        } elseif ($format.tbr) {
+            $bitrate = [double]$format.tbr
+        }
+        
+        if ($bitrate -gt $highestAudioBitrate) {
+            $highestAudioBitrate = $bitrate
+            $bestAudioFormat = $format
+        }
+    }
+    
+    # Check if we have a combined format with higher total bitrate
+    $bestCombinedFormat = $null
+    $highestCombinedBitrate = 0
+    
+    foreach ($format in $combinedFormats) {
+        $bitrate = 0
+        if ($format.tbr) {
+            $bitrate = [double]$format.tbr
+        }
+        
+        if ($bitrate -gt $highestCombinedBitrate) {
+            $highestCombinedBitrate = $bitrate
+            $bestCombinedFormat = $format
+        }
+    }
+    
+    # Compare and choose the best option
+    $totalSeparateBitrate = $highestVideoBitrate + $highestAudioBitrate
+    
+    $result = @{
+        FormatString = ""
+        Description = ""
+        VideoBitrate = 0
+        AudioBitrate = 0
+        TotalBitrate = 0
+        VideoFormat = $null
+        AudioFormat = $null
+        IsCombined = $false
+    }
+    
+    if ($bestCombinedFormat -and $highestCombinedBitrate -gt $totalSeparateBitrate) {
+        # Use combined format if it has higher bitrate
+        $result.FormatString = $bestCombinedFormat.format_id
+        $result.Description = "Combined format with highest bitrate ($($highestCombinedBitrate)k)"
+        $result.TotalBitrate = $highestCombinedBitrate
+        $result.VideoFormat = $bestCombinedFormat
+        $result.IsCombined = $true
+        Write-ErrorLog "Selected combined format: $($bestCombinedFormat.format_id) with bitrate $($highestCombinedBitrate)k"
+    } elseif ($bestVideoFormat -and $bestAudioFormat) {
+        # Use separate video+audio with highest bitrates
+        $result.FormatString = "$($bestVideoFormat.format_id)+$($bestAudioFormat.format_id)"
+        $result.Description = "Highest bitrate video ($($highestVideoBitrate)k) + audio ($($highestAudioBitrate)k)"
+        $result.VideoBitrate = $highestVideoBitrate
+        $result.AudioBitrate = $highestAudioBitrate
+        $result.TotalBitrate = $totalSeparateBitrate
+        $result.VideoFormat = $bestVideoFormat
+        $result.AudioFormat = $bestAudioFormat
+        $result.IsCombined = $false
+        Write-ErrorLog "Selected separate formats: video $($bestVideoFormat.format_id) ($($highestVideoBitrate)k) + audio $($bestAudioFormat.format_id) ($($highestAudioBitrate)k)"
+    } else {
+        # Fallback to standard best
+        $result.FormatString = "bestvideo+bestaudio/best"
+        $result.Description = "Fallback to standard best quality"
+        Write-ErrorLog "No suitable high bitrate formats found, using fallback"
+    }
+    
+    return $result
 }
 
 function Get-FormatDetails {
@@ -2012,12 +2220,12 @@ function Show-FormatsMenu {
     Write-Host "  " -NoNewline
     Write-Host "$([string]($optionNumber++)).".PadRight(4) -NoNewline -ForegroundColor Cyan
     Write-Host "🏆 " -NoNewline
-    Write-Host "Best Quality " -NoNewline -ForegroundColor Green
-    Write-Host "(Recommended - Merges best video + best audio)" -ForegroundColor Gray
+    Write-Host "Highest Bitrate Quality " -NoNewline -ForegroundColor Green
+    Write-Host "(Recommended - Selects highest bitrate video + audio)" -ForegroundColor Gray
     $menuOptions += @{
         Number = $optionNumber - 1
         Type = "best"
-        Description = "Download best available quality"
+        Description = "Download highest bitrate available quality"
     }
     
     # --- Combined formats (video+audio) ---
@@ -3281,12 +3489,19 @@ do {
                 }
                 
                 "best" {
-                    $formatStringForDownload = "bestvideo+bestaudio/best"
-                    $qualityPrefix = Get-QualityPrefix -Type "best" -SelectedOption $selectedOption
+                    # Find the format with highest bitrate
+                    $highestBitrateResult = Get-HighestBitrateFormat -Formats $formats
+                    $formatStringForDownload = $highestBitrateResult.FormatString
+                    $qualityPrefix = Get-QualityPrefix -Type "best" -SelectedOption $highestBitrateResult
                     $ytdlpOutputTemplate = Join-Path -Path $scriptDir -ChildPath "Temp\$qualityPrefix %(title)s.%(ext)s"
-                    Write-Host "Preparing to download best quality (merging best video + best audio)..." -ForegroundColor Green
                     
-                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type "video" -UseCookies $useCookies -CookieFilePath $cookieFilePath
+                    Write-Host "Preparing to download highest bitrate quality..." -ForegroundColor Green
+                    Write-Host "  Selected: $($highestBitrateResult.Description)" -ForegroundColor Cyan
+                    Write-Host "  Format: $formatStringForDownload" -ForegroundColor Gray
+                    
+                    # Choose download type based on whether it's combined or separate formats
+                    $downloadType = if ($highestBitrateResult.IsCombined) { "original_video" } else { "video" }
+                    $ytDlpArgsForDownload = New-DownloadArguments -FfmpegPath $ffmpegPath -OutputTemplate $ytdlpOutputTemplate -Format $formatStringForDownload -Url $currentUrl -Type $downloadType -UseCookies $useCookies -CookieFilePath $cookieFilePath
                     
                     $isVideoDownload = $true
                 }
